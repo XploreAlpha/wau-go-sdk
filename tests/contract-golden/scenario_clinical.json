@@ -1,0 +1,30 @@
+{
+  "scenario": "clinical",
+  "prompt": "I need clinical decision support for a patient",
+  "expected_selected_agent": "Jarvis",
+  "expected_status": "completed",
+  "expected_response_tokens": {
+    "en": ["clinical", "decision", "patient", "diagnos", "treatment"],
+    "zh": ["临床", "决策", "支持", "患者", "生物标志物"]
+  },
+  "kernel_response": {
+    "task_id": "task-clinical-001",
+    "status": "completed",
+    "selected_agent": "Jarvis",
+    "score": 0.92,
+    "decision": {
+      "selected_agent": "Jarvis",
+      "score": 0.92,
+      "decision_time_ms": 145,
+      "candidates": [
+        {"name": "Jarvis", "score": 0.92, "reason": "skill match: clinical-decision-support"},
+        {"name": "Benny", "score": 0.45, "reason": "no skill match"},
+        {"name": "Whis", "score": 0.30, "reason": "general fallback"}
+      ]
+    },
+    "a2a_call_ms": 4823,
+    "response": "【临床决策支持】根据患者症状,建议进行以下生物标志物筛查,结合循证医学证据制定治疗方案。",
+    "source_peer": "wau-go-sdk/0.6.0-preview.1",
+    "source_agent_id": "test-runner"
+  }
+}

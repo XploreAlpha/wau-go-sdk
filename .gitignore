@@ -1,0 +1,22 @@
+# Go
+*.test
+*.out
+*.prof
+*.cover
+coverage.txt
+coverage.html
+
+# buf generated
+/gen/
+/proto/gen/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Local config
+.env
+.env.local
+*.log

@@ -1,0 +1,30 @@
+{
+  "scenario": "pain",
+  "prompt": "Recommend an over-the-counter pain reliever",
+  "expected_selected_agent": "Benny",
+  "expected_status": "completed",
+  "expected_response_tokens": {
+    "en": ["ibuprofen", "acetaminophen", "pain", "reliever", "otc"],
+    "zh": []
+  },
+  "kernel_response": {
+    "task_id": "task-pain-003",
+    "status": "completed",
+    "selected_agent": "Benny",
+    "score": 0.88,
+    "decision": {
+      "selected_agent": "Benny",
+      "score": 0.88,
+      "decision_time_ms": 132,
+      "candidates": [
+        {"name": "Benny", "score": 0.88, "reason": "skill match: pharmaceutical"},
+        {"name": "Whis", "score": 0.35, "reason": "no skill match"},
+        {"name": "Jarvis", "score": 0.30, "reason": "no skill match"}
+      ]
+    },
+    "a2a_call_ms": 3521,
+    "response": "OTC pain reliever options include ibuprofen and acetaminophen. Consider the patient's medical history before recommending.",
+    "source_peer": "wau-go-sdk/0.6.0-preview.1",
+    "source_agent_id": "test-runner"
+  }
+}

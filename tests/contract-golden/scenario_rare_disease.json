@@ -1,0 +1,30 @@
+{
+  "scenario": "rare_disease",
+  "prompt": "Help me diagnose a rare disease",
+  "expected_selected_agent": "Jarvis",
+  "expected_status": "completed",
+  "expected_response_tokens": {
+    "en": ["diagnos", "rare", "disease", "clinical", "patient"],
+    "zh": ["罕见病", "鉴别", "诊断", "患者", "表型"]
+  },
+  "kernel_response": {
+    "task_id": "task-rare-005",
+    "status": "completed",
+    "selected_agent": "Jarvis",
+    "score": 0.95,
+    "decision": {
+      "selected_agent": "Jarvis",
+      "score": 0.95,
+      "decision_time_ms": 162,
+      "candidates": [
+        {"name": "Jarvis", "score": 0.95, "reason": "skill match: clinical-diagnostic-reasoning"},
+        {"name": "Benny", "score": 0.40, "reason": "no skill match"},
+        {"name": "Whis", "score": 0.25, "reason": "no skill match"}
+      ]
+    },
+    "a2a_call_ms": 5234,
+    "response": "【罕见病鉴别诊断】根据患者表型和临床特征,建议筛查以下鉴别诊断,并进行基因检测以明确诊断。",
+    "source_peer": "wau-go-sdk/0.6.0-preview.1",
+    "source_agent_id": "test-runner"
+  }
+}

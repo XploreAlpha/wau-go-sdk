@@ -1,0 +1,30 @@
+{
+  "scenario": "sales",
+  "prompt": "Show me this quarter's sales analytics",
+  "expected_selected_agent": "Whis",
+  "expected_status": "completed",
+  "expected_response_tokens": {
+    "en": ["sales", "analytics", "quarter", "data", "trend"],
+    "zh": []
+  },
+  "kernel_response": {
+    "task_id": "task-sales-004",
+    "status": "completed",
+    "selected_agent": "Whis",
+    "score": 0.78,
+    "decision": {
+      "selected_agent": "Whis",
+      "score": 0.78,
+      "decision_time_ms": 115,
+      "candidates": [
+        {"name": "Whis", "score": 0.78, "reason": "skill match: analyze-data"},
+        {"name": "Benny", "score": 0.25, "reason": "no skill match"},
+        {"name": "Jarvis", "score": 0.20, "reason": "no skill match"}
+      ]
+    },
+    "a2a_call_ms": 2890,
+    "response": "Q1 sales analytics: total revenue up 15% YoY, key trend in enterprise segment.",
+    "source_peer": "wau-go-sdk/0.6.0-preview.1",
+    "source_agent_id": "test-runner"
+  }
+}

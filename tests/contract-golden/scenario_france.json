@@ -1,0 +1,30 @@
+{
+  "scenario": "france",
+  "prompt": "What is the capital of France?",
+  "expected_selected_agent": "Whis",
+  "expected_status": "completed",
+  "expected_response_tokens": {
+    "en": ["paris"],
+    "zh": []
+  },
+  "kernel_response": {
+    "task_id": "task-france-002",
+    "status": "completed",
+    "selected_agent": "Whis",
+    "score": 0.55,
+    "decision": {
+      "selected_agent": "Whis",
+      "score": 0.55,
+      "decision_time_ms": 98,
+      "candidates": [
+        {"name": "Whis", "score": 0.55, "reason": "general fallback"},
+        {"name": "Jarvis", "score": 0.20, "reason": "no skill match"},
+        {"name": "Benny", "score": 0.15, "reason": "no skill match"}
+      ]
+    },
+    "a2a_call_ms": 2105,
+    "response": "The capital of France is Paris.",
+    "source_peer": "wau-go-sdk/0.6.0-preview.1",
+    "source_agent_id": "test-runner"
+  }
+}
