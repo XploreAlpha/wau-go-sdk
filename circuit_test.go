@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wau/circuit"
+	"github.com/XploreAlpha/circuit"
 )
 
 func TestCircuitAdapter_Disabled_PassesThrough(t *testing.T) {

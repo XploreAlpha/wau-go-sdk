@@ -5,7 +5,7 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/wau/circuit"
+	"github.com/XploreAlpha/circuit"
 )
 
 // circuitAdapter 把 wau-circuit 包装成 SDK 友好的 Guard 装饰器。
