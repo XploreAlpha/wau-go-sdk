@@ -75,6 +75,7 @@ type Options struct {
 	Auth       AuthConfig
 	Logger     *slog.Logger
 	UserAgent  string // default "wau-go-sdk/0.6.0-preview.1"
+	Tracer     Tracer // v0.7.0 W1: 可选 OTel-compatible tracer(nil = noop)
 }
 
 // Option configures a Client via the functional options pattern.
@@ -123,6 +124,14 @@ func WithLogger(l *slog.Logger) Option {
 // WithUserAgent overrides the User-Agent header.
 func WithUserAgent(ua string) Option {
 	return func(o *Options) { o.UserAgent = ua }
+}
+
+// WithTracer 注入 OTel-compatible tracer(v0.7.0 W1 新增)。
+//
+// 不强制 OTel 依赖 — 用户实现 wau.Tracer 接口(adapter to OTel SDK)。
+// 传 nil = 关闭追踪(等价 noop)。
+func WithTracer(t Tracer) Option {
+	return func(o *Options) { o.Tracer = t }
 }
 
 // applyOptions applies defaults and returns the final Options.

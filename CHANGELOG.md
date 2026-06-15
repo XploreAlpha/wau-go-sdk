@@ -1,5 +1,28 @@
 # Changelog
 
+## [Unreleased] — v1.0.0-rc.1 (2026-06-14, W1 M3 Day 3)
+
+> 🔷 Amber M3 W1 启动 — Go SDK GA 收尾
+
+### 新增
+
+- **OTel-compatible Tracer 抽象**(`Tracer` + `Span` interfaces + `noopTracer` 默认):
+  - 用户实现 `wau.Tracer` 接口(adapter to OTel SDK)
+  - `WithTracer(t Tracer)` option 注入
+  - 不传 = `noopTracer{}` 默认(零依赖)
+  - `doWithRetry` 自动包 `StartSpan` / `RecordError` / `SetAttribute` / `End`
+  - 适配 OTel / OpenTracing / 自定义
+
+### 测试
+
+- `tracer_test.go` — 3 个单测(默认 noop / WithTracer 注入 / noop 零副作用)+ `stubTracer` 验证
+- 跟既有 TestRetry / TestCircuit 测试不冲突
+
+### 战略意义
+
+- 1.0.0 GA 验收 — 兼容 OTel 但不强制 import,符合 "OTel 是 optional 集成" 原则
+- semver 准备:`Public API stable since v1.0.0`(GA 时正式声明)
+
 ## v0.6.0-preview.1 (2026-06-14)
 
 > 🔶 Carnelian M3 W5 启动

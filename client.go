@@ -36,6 +36,7 @@ type Client struct {
 	rt      *retrier
 	ca      *circuitAdapter
 	signer  *signer
+	tracer  Tracer // v0.7.0 W1: 可选 OTel-compatible tracer
 	agents  *AgentsService
 	tasks   *TasksService
 	kernel  *KernelService
@@ -59,6 +60,12 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 		rt:      newRetrier(o.Retry),
 		ca:      newCircuitAdapter(o.Circuit, o.Logger),
 		logger:  o.Logger,
+	}
+	// v0.7.0 W1: tracer 默认 noop(用户不显式 WithTracer 时)
+	if o.Tracer != nil {
+		c.tracer = o.Tracer
+	} else {
+		c.tracer = noopTracer{}
 	}
 	// 鉴权可选
 	if len(o.Auth.SharedSecret) > 0 {
@@ -96,9 +103,41 @@ func (c *Client) BaseURL() string { return c.baseURL }
 // CircuitState 返回当前 SDK 内部熔断状态(给 debug / metrics 用)
 func (c *Client) CircuitState() string { return c.ca.State() }
 
+// Tracer 是 v0.7.0 W1 新增的可选追踪接口。
+//
+// SDK 用户可以实现这个接口(adapter to OTel / OpenTracing / 自定义)并通过 WithTracer 注入。
+// 不强制 OTel 依赖 — 用户自行 import OTel SDK。
+type Tracer interface {
+	// StartSpan 在请求开始时调用,返回的 span 在请求结束时 End。
+	StartSpan(ctx context.Context, operationName string) (context.Context, Span)
+}
+
+// Span 表示一个追踪段。
+type Span interface {
+	// SetAttribute 设置属性(key/value)。
+	SetAttribute(key string, value any)
+	// RecordError 记录错误。
+	RecordError(err error)
+	// End 结束 span。
+	End()
+}
+
+// noopTracer 是默认 Tracer,什么也不做。
+type noopTracer struct{}
+
+func (noopTracer) StartSpan(ctx context.Context, name string) (context.Context, Span) {
+	return ctx, noopSpan{}
+}
+
+type noopSpan struct{}
+
+func (noopSpan) SetAttribute(key string, value any)  {}
+func (noopSpan) RecordError(err error)                {}
+func (noopSpan) End()                                 {}
+
 // doWithRetry 在 transport.do 外面包重试 + 鉴权 + 熔断。
 //
-// 调用链:Caller → Client.doWithRetry → Retrier.Do → Circuit.Guard → Transport.do
+// 调用链:Caller → Client.doWithRetry → Tracer.StartSpan → Retrier.Do → Circuit.Guard → Transport.do
 //
 // 错误返回:
 //   - ErrCircuitOpen: 熔断开
@@ -106,21 +145,33 @@ func (c *Client) CircuitState() string { return c.ca.State() }
 //   - *APIError: HTTP 4xx/5xx(可能经重试后仍是)
 //   - context.Canceled / DeadlineExceeded: ctx 取消
 func (c *Client) doWithRetry(ctx context.Context, method, path string, body, v any) error {
+	// v0.7.0 W1: OTel-compatible span(可选,无侵入)
+	spanCtx, span := c.tracer.StartSpan(ctx, "wau."+method+" "+path)
+	defer span.End()
+
 	op := func() error {
-		return c.ca.Guard(ctx, func() error {
+		return c.ca.Guard(spanCtx, func() error {
 			// 鉴权签 JWT(每次请求新签)
 			if c.signer != nil {
 				jwtStr, err := c.signer.Sign()
 				if err != nil {
+					span.RecordError(err)
 					return err
 				}
 				// 用 transport 内置的 header 注入
 				c.tp.setAuthHeader("Bearer " + jwtStr)
 			}
-			return c.tp.do(ctx, method, path, body, v)
+			err := c.tp.do(spanCtx, method, path, body, v)
+			if err != nil {
+				span.RecordError(err)
+				span.SetAttribute("http.error", err.Error())
+			} else {
+				span.SetAttribute("http.success", true)
+			}
+			return err
 		})
 	}
-	return c.rt.Do(ctx, op)
+	return c.rt.Do(spanCtx, op)
 }
 
 // 避免 import "net/http" 未用
