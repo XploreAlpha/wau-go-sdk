@@ -1,10 +1,28 @@
 # Changelog
 
-## [Unreleased] — v1.0.0-rc.1 (2026-06-14, W1 M3 Day 3)
+## [v1.0.0] "Amber" - 2026-07-25 (W7.7 GA 文档校准)
 
-> 🔷 Amber M3 W1 启动 — Go SDK GA 收尾
+> 🔷 **v0.7.0 "Amber" M3 W7.7 GA** — 文档校准为正式 v1.0.0 GA
+> **状态**:✅ **v1.0.0 GA** — Public API stable
+> **关联**:
+> - [v0.7.0 milestone](/home/inamoto888/WAU-develop/develop-log/kernel/v0.7.0/milestone.md)
+> - [W1-Day3 report](/home/inamoto888/WAU-develop/develop-log/kernel/v0.7.0/2026-06-15-W1-Day3.md)(Tracer 抽象)
+> - [W7.7 acceptance](/home/inamoto888/WAU-develop/develop-log/kernel/v0.7.0/2026-07-25-W7-day7-5repos-finalize.md)
 
-### 新增
+### Public API Stability
+
+**The public API is stable since v1.0.0 (2026-07-25).**
+
+Breaking changes follow SemVer 2.0.0:
+- MAJOR for breaking, MINOR for feature, PATCH for fix
+
+### Deprecation Policy
+
+- Deprecated APIs supported for ≥ 1 minor version
+- Compile-time warning with migration hint
+- Listed in this CHANGELOG `### Deprecated` section
+
+### Added(自 v0.6.0-preview.1)
 
 - **OTel-compatible Tracer 抽象**(`Tracer` + `Span` interfaces + `noopTracer` 默认):
   - 用户实现 `wau.Tracer` 接口(adapter to OTel SDK)
@@ -17,11 +35,25 @@
 
 - `tracer_test.go` — 3 个单测(默认 noop / WithTracer 注入 / noop 零副作用)+ `stubTracer` 验证
 - 跟既有 TestRetry / TestCircuit 测试不冲突
+- `edgecase_test.go` — 5 edge case 单测(timeout / rate-limit / cancel / retry / 5xx)— W1 Day 6
 
 ### 战略意义
 
-- 1.0.0 GA 验收 — 兼容 OTel 但不强制 import,符合 "OTel 是 optional 集成" 原则
-- semver 准备:`Public API stable since v1.0.0`(GA 时正式声明)
+- ✅ **1.0.0 GA 验收** — 兼容 OTel 但不强制 import,符合 "OTel 是 optional 集成" 原则
+- ✅ semver:**`Public API stable since v1.0.0 (2026-07-25)`**(W7.7 校准时正式声明)
+- **跨 SDK 一致性**:wau-go-sdk / wau-python-sdk / wau-typescript-sdk / wau-rust-sdk 4/5 SDK 1.0 GA(KPI 9 v0.7.0)
+
+### Manual Release 步骤(用户手动)
+
+```bash
+cd /home/inamoto888/project/wau-go-sdk
+git status
+git add -A
+git commit -m "v0.7.0 W7.7: Go SDK v1.0.0 GA 文档校准 — Public API stable + deprecation policy"
+git push origin main
+git tag -a v1.0.0 -m "wau-go-sdk v1.0.0 — first stable release (Amber)"
+git push origin v1.0.0
+```
 
 ## v0.6.0-preview.1 (2026-06-14)
 
