@@ -30,9 +30,15 @@ type Agent struct {
 	Description string   `json:"description"`
 	Skills      []string `json:"skills"`
 	Universes   []string `json:"universes"`
-	Trust       float64  `json:"trust"`
-	Status      string   `json:"status"`
-	LastSeen    string   `json:"lastSeen"`
+	// UniverseLabels K8s-style labels(per universe,v0.8.0 M3-2A 新增)
+	//   - 业务分组用 Universes(原字段,保持向后兼容)
+	//   - 资源 / 调度特征用 UniverseLabels(新字段,per agent 粒度)
+	//   - 老 client 不传 → nil(server 视为空 map)
+	//   - 字段名跟 afp-protocol v0.2 + WAU-core-kernel proto 1:1 对齐
+	UniverseLabels map[string]string `json:"universe_labels,omitempty"`
+	Trust          float64           `json:"trust"`
+	Status         string            `json:"status"`
+	LastSeen       string            `json:"lastSeen"`
 }
 
 // AgentListResponse is the paginated list of agents.
@@ -69,6 +75,9 @@ type AgentRegisterRequest struct {
 	Description string   `json:"description"`
 	Skills      []string `json:"skills"`
 	Universes   []string `json:"universes"`
+	// UniverseLabels K8s-style labels(per universe,v0.8.0 M3-2A 新增)
+	// 跟 Agent.UniverseLabels 字段语义一致(per agent 粒度)
+	UniverseLabels map[string]string `json:"universe_labels,omitempty"`
 }
 
 // AgentScore represents an agent's 15-dim score (current kernel returns 5-dim subset).
