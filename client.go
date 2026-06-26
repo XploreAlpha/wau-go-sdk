@@ -37,11 +37,12 @@ type Client struct {
 	ca      *circuitAdapter
 	signer  *signer
 	tracer  Tracer // v0.7.0 W1: 可选 OTel-compatible tracer
-	agents  *AgentsService
-	tasks   *TasksService
-	kernel  *KernelService
-	intent  *IntentService
-	logger  *slog.Logger
+	agents    *AgentsService
+	tasks     *TasksService
+	kernel    *KernelService
+	intent    *IntentService
+	handshake *HandshakeService
+	logger    *slog.Logger
 }
 
 // New creates a new WAU SDK client.
@@ -79,6 +80,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	c.tasks = &TasksService{c: c}
 	c.kernel = &KernelService{c: c}
 	c.intent = &IntentService{c: c}
+	c.handshake = &HandshakeService{c: c} // v0.8.0 M5-1 B.1
 	return c, nil
 }
 
@@ -93,6 +95,17 @@ func (c *Client) Kernel() *KernelService { return c.kernel }
 
 // Intent returns the IntentService (gRPC stub — M3.1 实装,目前返 ErrNotImplemented).
 func (c *Client) Intent() *IntentService { return c.intent }
+
+// Handshake returns the HandshakeService (v0.8.0 M5-1 B.1).
+//
+// 用法:
+//
+//	resp, err := c.Handshake().CreateSession(ctx, wau.HandshakeRequest{
+//	    TenantID: "tenant-A",
+//	    AgentID:  "Benny",
+//	    Protocol: "a2a",
+//	})
+func (c *Client) Handshake() *HandshakeService { return c.handshake }
 
 // Close releases SDK resources. Currently no-op; will be used by M3.1 gRPC client.
 func (c *Client) Close() error { return nil }

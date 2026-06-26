@@ -1,0 +1,16 @@
+{
+  "scenario": "handshake_reuse",
+  "endpoint": "POST /v0.8.0/handshake/sessions",
+  "request": {
+    "tenant_id": "tenant-A",
+    "client_id": "wau-shared-pool/1.1.0",
+    "agent_id": "Benny",
+    "protocol": "a2a"
+  },
+  "expected_response": {
+    "reused": true,
+    "session_id_must_match_previous": true
+  },
+  "expected_error_codes": [],
+  "notes": "v0.8.0 M5-1 B.1 reuse hit — 第二次同 (tenant, client, agent) 三元组, reused=true, session_id 与首次一致"
+}

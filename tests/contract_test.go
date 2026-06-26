@@ -173,14 +173,25 @@ func TestContract_GoldenJSON_SingleSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read golden dir: %v", err)
 	}
-	count := 0
+	scenarioCount := 0
+	handshakeCount := 0
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
-			count++
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		// v0.8.0 M5-1 B.1:握手黄金 JSON 独立统计(handshake_*.json 5 个)
+		if strings.HasPrefix(e.Name(), "handshake_") {
+			handshakeCount++
+		} else {
+			scenarioCount++
 		}
 	}
-	if count != 5 {
-		t.Errorf("黄金 JSON 文件数 = %d, want 5 (clinical/france/pain/sales/rare_disease)", count)
+	if scenarioCount != 5 {
+		t.Errorf("scenario 黄金 JSON 文件数 = %d, want 5 (clinical/france/pain/sales/rare_disease)", scenarioCount)
+	}
+	// handshake_*.json 5 个 B.1.5 约束(per plan §B.1.5 + D.关键复用)
+	if handshakeCount != 5 {
+		t.Errorf("handshake 黄金 JSON 文件数 = %d, want 5 (handshake_happy/reuse/agent_not_found/tenant_mismatch/invalid_request)", handshakeCount)
 	}
 }
 
@@ -200,6 +211,14 @@ func TestContract_GoldenJSON_Schema(t *testing.T) {
 			var got map[string]any
 			if err := json.Unmarshal(data, &got); err != nil {
 				t.Fatalf("unmarshal: %v", err)
+			}
+			// v0.8.0 M5-1 B.1:handshake_*.json 是握手端点契约(不同 schema),
+			// schema 校验由 tests/handshake_contract_test.go 单独做
+			if strings.HasPrefix(e.Name(), "handshake_") {
+				if _, ok := got["endpoint"]; !ok {
+					t.Errorf("握手黄金 JSON %s 缺 endpoint 字段", e.Name())
+				}
+				return
 			}
 			for _, k := range []string{"scenario", "prompt", "expected_selected_agent", "expected_status", "kernel_response"} {
 				if _, ok := got[k]; !ok {
