@@ -172,3 +172,72 @@ type IntentDTO struct {
 	Urgency             string   `json:"urgency"`
 	EstimatedComplexity int      `json:"estimatedComplexity"`
 }
+
+// ============== Chat / LLM DTO(v0.9.0 M3 §3.7 新增,per D20 architecture-pivot)==============
+//
+// wau-edge OpenAI 兼容层转发路径(per M2 §2.5):
+//   bot → wau-edge :18402 /v1/chat/completions
+//        → wau-llm-router :18403 /v1/resolve(决定 userToken + model)
+//        → new-api sidecar :3000 /v1/chat/completions(真 LLM 调用)
+//
+// 字段 1:1 对齐 OpenAI Chat Completions API(per https://platform.openai.com/docs/api-reference/chat),
+// 4 SDK 通用,test mock 跟真 wau-edge 字节级兼容。
+
+// ChatMessage is one message in a chat conversation.
+//
+// Role: "system" / "user" / "assistant" / "tool"
+type ChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+	// Name 可选(per OpenAI spec)
+	Name string `json:"name,omitempty"`
+}
+
+// ChatCompletionRequest is the OpenAI-compatible chat request.
+//
+// Model: 必填(如 "gpt-4o-mini" / "claude-haiku"),为空时 wau-edge 走 default_model。
+// Messages: 必填 ≥ 1 条 user 消息。
+// Stream: 雏形期只支持 false(M3 §3.7 续支持 streaming)。
+// Universe: 业务分组(透传到 wau-llm-router + new-api),非必填,默认 "default"。
+// Tenant: 由 JWT claim 注入,request 体不重复带(server 端以 JWT 为准,防越权)。
+type ChatCompletionRequest struct {
+	Model    string        `json:"model"`
+	Messages []ChatMessage `json:"messages"`
+	Stream   bool          `json:"stream,omitempty"`
+	// WAU 扩展字段(per D20) — Universe 业务分组
+	Universe string `json:"universe,omitempty"`
+	// 自由扩展,4 SDK 通用 metadata 通道(走 OpenAI 不识别字段,wau-edge 透传到 router)
+	Metadata map[string]string `json:"metadata,omitempty"`
+	// 常用可选(对齐 OpenAI spec,雏形期不强制实现)
+	Temperature *float64 `json:"temperature,omitempty"`
+	MaxTokens   int      `json:"max_tokens,omitempty"`
+}
+
+// ChatChoice one of N returned choices (OpenAI compat).
+type ChatChoice struct {
+	Index        int         `json:"index"`
+	Message      ChatMessage `json:"message"`
+	FinishReason string      `json:"finish_reason"`
+}
+
+// ChatUsage token usage stats (OpenAI compat).
+type ChatUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+}
+
+// ChatCompletionResponse OpenAI 兼容的 chat response。
+//
+// 字段 1:1 对齐 OpenAI ChatCompletion object;wau-edge 跟 wau-llm-router / new-api
+// 串联后字节级兼容(per M2 §2.5 端到端 mock 验证)。
+type ChatCompletionResponse struct {
+	ID      string       `json:"id"`
+	Object  string       `json:"object"`
+	Created int64        `json:"created"`
+	Model   string       `json:"model"`
+	Choices []ChatChoice `json:"choices"`
+	Usage   ChatUsage    `json:"usage"`
+	// WAU 扩展 — reason 是 wau-llm-router 的决策原因,debug / audit 用
+	Reason string `json:"reason,omitempty"`
+}

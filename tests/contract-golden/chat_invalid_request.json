@@ -1,0 +1,24 @@
+{
+  "endpoint": "POST /v1/chat/completions",
+  "_meta": {
+    "purpose": "v0.9.0 M3 §3.7 跨 SDK chat 错误码契约(per wau-edge §2.2 + §2.5)",
+    "error_codes": {
+      "-32600": "InvalidRequest",
+      "-32601": "ModelNotFound"
+    },
+    "written": "2026-06-30"
+  },
+  "request_invalid": {
+    "model": "",
+    "messages": []
+  },
+  "response_error": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": -32600,
+        "message": "InvalidRequest: model and messages required"
+      }
+    }
+  }
+}

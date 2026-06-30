@@ -180,8 +180,11 @@ func TestContract_GoldenJSON_SingleSource(t *testing.T) {
 			continue
 		}
 		// v0.8.0 M5-1 B.1:握手黄金 JSON 独立统计(handshake_*.json 5 个)
+		// v0.9.0 M3 §3.7:chat 黄金 JSON 独立统计(chat_*.json,数量不固定,跳过严格校验)
 		if strings.HasPrefix(e.Name(), "handshake_") {
 			handshakeCount++
+		} else if strings.HasPrefix(e.Name(), "chat_") {
+			// chat 黄金 JSON 独立统计,数量不固定,只 log 不 assert
 		} else {
 			scenarioCount++
 		}
@@ -217,6 +220,14 @@ func TestContract_GoldenJSON_Schema(t *testing.T) {
 			if strings.HasPrefix(e.Name(), "handshake_") {
 				if _, ok := got["endpoint"]; !ok {
 					t.Errorf("握手黄金 JSON %s 缺 endpoint 字段", e.Name())
+				}
+				return
+			}
+			// v0.9.0 M3 §3.7:chat_*.json 是 wau-edge OpenAI 兼容层契约(不同 schema),
+			// schema 校验由 tests/chat_contract_test.go 单独做
+			if strings.HasPrefix(e.Name(), "chat_") {
+				if _, ok := got["endpoint"]; !ok {
+					t.Errorf("chat 黄金 JSON %s 缺 endpoint 字段", e.Name())
 				}
 				return
 			}

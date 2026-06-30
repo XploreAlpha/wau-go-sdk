@@ -1,0 +1,37 @@
+{
+  "endpoint": "POST /v1/chat/completions",
+  "_meta": {
+    "purpose": "v0.9.0 M3 §3.7 跨 SDK chat 契约黄金 JSON(真相源)",
+    "via": "wau-edge OpenAI 兼容层(per M2 §2.5)",
+    "sdk_parity": "字段 1:1 对齐 OpenAI spec,4 SDK(go/python/ts/rust) wire 字节级一致",
+    "written": "2026-06-30"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {"role": "system", "content": "你是一个 helpful assistant。"},
+      {"role": "user", "content": "你好"}
+    ],
+    "universe": "default",
+    "metadata": {"source": "telegram"}
+  },
+  "response": {
+    "id": "chatcmpl-golden-001",
+    "object": "chat.completion",
+    "created": 1700000000,
+    "model": "gpt-4o-mini",
+    "choices": [
+      {
+        "index": 0,
+        "message": {"role": "assistant", "content": "echo: 你好"},
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 5,
+      "completion_tokens": 3,
+      "total_tokens": 8
+    },
+    "reason": "static:tenant=acme model=gpt-4o-mini"
+  }
+}

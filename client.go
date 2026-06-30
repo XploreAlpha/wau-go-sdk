@@ -42,6 +42,7 @@ type Client struct {
 	kernel    *KernelService
 	intent    *IntentService
 	handshake *HandshakeService
+	chat      *ChatService
 	logger    *slog.Logger
 }
 
@@ -81,6 +82,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	c.kernel = &KernelService{c: c}
 	c.intent = &IntentService{c: c}
 	c.handshake = &HandshakeService{c: c} // v0.8.0 M5-1 B.1
+	c.chat = &ChatService{c: c}          // v0.9.0 M3 §3.7
 	return c, nil
 }
 
@@ -106,6 +108,18 @@ func (c *Client) Intent() *IntentService { return c.intent }
 //	    Protocol: "a2a",
 //	})
 func (c *Client) Handshake() *HandshakeService { return c.handshake }
+
+// Chat returns the ChatService (v0.9.0 M3 §3.7, wau-edge OpenAI 兼容层封装)。
+//
+// 用法:
+//
+//	resp, err := c.Chat().Completions(ctx, wau.ChatCompletionRequest{
+//	    Model:    "gpt-4o-mini",
+//	    Messages: []wau.ChatMessage{{Role: "user", Content: "hello"}},
+//	})
+//
+// baseURL 应该指向 wau-edge(默认 :18402),不是 wau-core :18400(老路径)。
+func (c *Client) Chat() *ChatService { return c.chat }
 
 // Close releases SDK resources. Currently no-op; will be used by M3.1 gRPC client.
 func (c *Client) Close() error { return nil }
