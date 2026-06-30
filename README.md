@@ -59,6 +59,51 @@ client.Intent().Parse(ctx, prompt)     // gRPC stub(M3.1 实装)
 
 v0.7.0 完整计划:[`/home/inamoto888/WAU-develop/develop-log/kernel/v0.7.0/milestone.md`](file:///home/inamoto888/WAU-develop/develop-log/kernel/v0.7.0/milestone.md)
 
+## v0.9.0 "Acorn" 收口段(2026-09-15 GA)
+
+上文介绍 v0.7.0 计划 + 协议。本段为 v0.9.0 GA 增量补充。
+
+### 角色
+
+| OS 类比 | Client SDK(Go,开发者入口)|
+|---|---|
+| 部署 | Go module,被 B 端开发者 `go get` |
+| 通信 | gRPC → wau-llm-router :18404 + wau-channel webhook 模式 |
+| 状态 | v1.1.0 已随 v0.8.0 GA 同步发版(2026-07-13)|
+
+### v0.9.0 新增
+
+- **直连 wau-llm-router**(per [[project-v0-9-0-M3-§3.7-chat-sdk-4langs-2026-06-30]]):不再经过 wau-edge 也能调
+- **bot/ 字段 5/5 100% 对齐**(per [[project-v0-9-0-stage0-closure-2026-06-28]]):Telegram / Discord / Webhook
+- **per §3.7 §6**:4 SDK 一致 26 funcs / 0 回归
+
+### 5 行 SDK 用例
+
+```go
+import "github.com/XploreAlpha/wau-go-sdk/bot/telegram"
+
+bot := telegram.New(telegram.Config{
+    Token:   os.Getenv("TELEGRAM_TOKEN"),
+    TenantID: "acme",
+})
+bot.Start() // 监听消息 + 自动转 Task
+```
+
+### v0.9.0 "Acorn" 5 份核心文档
+
+| # | 文件 | 内容 |
+|---|---|---|
+| 1 | [README.md](README.md)(本文件)| SDK 入口 + 协议 |
+| 2 | [QUICKSTART.md](QUICKSTART.md) | 15 分钟跑通第 1 个 bot |
+| 3 | [DEPLOY.md](DEPLOY.md) | 发布 + 版本管理 |
+| 4 | [ARCHITECTURE.md](ARCHITECTURE.md) | 模块 + 直连链路 |
+| 5 | [CHANGELOG.md](CHANGELOG.md) | v0.7.0 + v1.1.0 倒序(136 行已存在)|
+
+### 历史锚点
+
+- v1.1.0 SDK 同步发版(per [[project-v0.8.0-GA-2026-07-13]])
+- bot/ 字段 5/5 对齐(per [[project-v0-9-0-stage0-closure-2026-06-28]])
+
 ## 协议
 
 MIT © 2026 youhaoxi
