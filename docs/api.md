@@ -1,7 +1,18 @@
 # API 参考
 
-> v0.6.0-preview.1 P1 阶段(11 HTTP 端点)
-> P2 (gRPC 20 RPC) 推到 M3.1;P3 (A2A/AFP 协议层) 推到 v0.7.0+
+> ⚠️ **本文档已迁移到 [../API.md](../API.md)(Stage 3.2 SDK doc 完整化,2026-07-01)**
+>
+> 旧版本(v0.6.0-preview.1 P1 阶段)仅保留作历史参考。
+> **请使用最新版本** [../API.md](../API.md),包含:
+> - 完整 11 端点 × 6 服务覆盖
+> - ChatService(Stage 3.1 4 SDK 全 2xx 实测)
+> - Bot 子包(telegram / discord / webhook per D13)
+> - 9 sentinel error + 9 handshake sentinel + wau-edge 6 错误码
+> - 配套 FAQ:[../FAQ.md](../FAQ.md)(10 通用 + 5 Go 特定)
+
+---
+
+# 历史版本(已迁移,仅作参考)
 
 ## Client
 

@@ -13,22 +13,47 @@ import (
 
 var testSecret = []byte("test-secret-32-bytes-long-xxxxx")
 
+// newAuthBuilder 统一构造测试用的 AuthConfig,避免每个 case 重复 TenantID/Subject。
+// 注意:TenantID 是必填(per Stage 3.1 #1 修复),空字符串会被 newSigner 拒。
+func newAuthBuilder(overrides ...func(*AuthConfig)) AuthConfig {
+	a := AuthConfig{
+		AgentName:    "test",
+		TenantID:     "test-tenant", // 默认租户,每个 case 视情况覆盖
+		SharedSecret: testSecret,
+	}
+	for _, fn := range overrides {
+		fn(&a)
+	}
+	return a
+}
+
 func TestNewSigner_EmptySecret_Errors(t *testing.T) {
-	_, err := newSigner(AuthConfig{AgentName: "test", SharedSecret: nil})
+	_, err := newSigner(newAuthBuilder(func(a *AuthConfig) { a.SharedSecret = nil }))
 	if err == nil {
 		t.Fatal("期望空 secret 返错")
 	}
 }
 
 func TestNewSigner_EmptyAgentName_Errors(t *testing.T) {
-	_, err := newSigner(AuthConfig{AgentName: "", SharedSecret: testSecret})
+	_, err := newSigner(newAuthBuilder(func(a *AuthConfig) { a.AgentName = "" }))
 	if err == nil {
 		t.Fatal("期望空 AgentName 返错")
 	}
 }
 
+// TestNewSigner_EmptyTenantID_Errors — Stage 3.1 #1 新增(2026-07-01)
+//
+// wau-edge Claims 必填 tenant_id(per wau-edge/internal/auth/jwt.go:96-98)。
+// SDK 必须强制租户非空,否则下游永远 401。
+func TestNewSigner_EmptyTenantID_Errors(t *testing.T) {
+	_, err := newSigner(newAuthBuilder(func(a *AuthConfig) { a.TenantID = "" }))
+	if err == nil {
+		t.Fatal("期望空 TenantID 返错")
+	}
+}
+
 func TestNewSigner_DefaultRole_ExternalAgent(t *testing.T) {
-	s, err := newSigner(AuthConfig{AgentName: "test", SharedSecret: testSecret})
+	s, err := newSigner(newAuthBuilder())
 	if err != nil {
 		t.Fatalf("newSigner: %v", err)
 	}
@@ -38,11 +63,10 @@ func TestNewSigner_DefaultRole_ExternalAgent(t *testing.T) {
 }
 
 func TestNewSigner_CustomRole(t *testing.T) {
-	s, err := newSigner(AuthConfig{
-		AgentName:    "kernel",
-		SharedSecret: testSecret,
-		Role:         RoleKernelCore,
-	})
+	s, err := newSigner(newAuthBuilder(func(a *AuthConfig) {
+		a.AgentName = "kernel"
+		a.Role = RoleKernelCore
+	}))
 	if err != nil {
 		t.Fatalf("newSigner: %v", err)
 	}
@@ -51,8 +75,33 @@ func TestNewSigner_CustomRole(t *testing.T) {
 	}
 }
 
+// TestNewSigner_SubjectDefaultsToAgentName — Stage 3.1 #1 新增
+func TestNewSigner_SubjectDefaultsToAgentName(t *testing.T) {
+	s, err := newSigner(newAuthBuilder(func(a *AuthConfig) { a.AgentName = "my-agent" }))
+	if err != nil {
+		t.Fatalf("newSigner: %v", err)
+	}
+	if s.subject != "my-agent" {
+		t.Errorf("subject = %q, want 兜底用 AgentName = %q", s.subject, "my-agent")
+	}
+}
+
+// TestNewSigner_CustomSubject — Stage 3.1 #1 新增
+func TestNewSigner_CustomSubject(t *testing.T) {
+	s, err := newSigner(newAuthBuilder(func(a *AuthConfig) {
+		a.AgentName = "agent-x"
+		a.Subject = "user-y"
+	}))
+	if err != nil {
+		t.Fatalf("newSigner: %v", err)
+	}
+	if s.subject != "user-y" {
+		t.Errorf("subject = %q, want user-y", s.subject)
+	}
+}
+
 func TestSigner_Sign_BasicJWT(t *testing.T) {
-	s, _ := newSigner(AuthConfig{AgentName: "test-agent", SharedSecret: testSecret})
+	s, _ := newSigner(newAuthBuilder(func(a *AuthConfig) { a.AgentName = "test-agent" }))
 	tok, err := s.Sign()
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
@@ -74,8 +123,13 @@ func TestSigner_Sign_BasicJWT(t *testing.T) {
 	}
 }
 
+// TestSigner_Sign_IncludesExpIatJti — Stage 3.1 #1 扩展,加 tenant_id / sub 校验
 func TestSigner_Sign_IncludesExpIatJti(t *testing.T) {
-	s, _ := newSigner(AuthConfig{AgentName: "test-agent", SharedSecret: testSecret})
+	s, _ := newSigner(newAuthBuilder(func(a *AuthConfig) {
+		a.AgentName = "test-agent"
+		a.TenantID = "tenant-42"
+		a.Subject = "user-7"
+	}))
 	tok, err := s.Sign()
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
@@ -85,7 +139,8 @@ func TestSigner_Sign_IncludesExpIatJti(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseUnverified: %v", err)
 	}
-	for _, k := range []string{"agent", "role", "iat", "exp", "jti"} {
+	// Stage 3.1 #1 修复后:wau-edge Claims 必填 tenant_id + sub 对齐 Subject
+	for _, k := range []string{"agent", "role", "sub", "tenant_id", "iat", "exp", "jti"} {
 		if _, ok := claims[k]; !ok {
 			t.Errorf("JWT 缺字段 %q", k)
 		}
@@ -93,10 +148,16 @@ func TestSigner_Sign_IncludesExpIatJti(t *testing.T) {
 	if claims["agent"] != "test-agent" {
 		t.Errorf("agent claim = %v, want test-agent", claims["agent"])
 	}
+	if claims["tenant_id"] != "tenant-42" {
+		t.Errorf("tenant_id claim = %v, want tenant-42", claims["tenant_id"])
+	}
+	if claims["sub"] != "user-7" {
+		t.Errorf("sub claim = %v, want user-7", claims["sub"])
+	}
 }
 
 func TestSigner_Sign_5MinExpiry(t *testing.T) {
-	s, _ := newSigner(AuthConfig{AgentName: "test", SharedSecret: testSecret})
+	s, _ := newSigner(newAuthBuilder())
 	before := time.Now()
 	tok, _ := s.Sign()
 	after := time.Now()
@@ -117,7 +178,7 @@ func TestSigner_Sign_5MinExpiry(t *testing.T) {
 }
 
 func TestSigner_Sign_JTIUniqueness(t *testing.T) {
-	s, _ := newSigner(AuthConfig{AgentName: "test", SharedSecret: testSecret})
+	s, _ := newSigner(newAuthBuilder())
 	seen := map[string]bool{}
 	for i := 0; i < 100; i++ {
 		tok, _ := s.Sign()
@@ -132,7 +193,7 @@ func TestSigner_Sign_JTIUniqueness(t *testing.T) {
 }
 
 func TestSigner_Sign_HS256Alg(t *testing.T) {
-	s, _ := newSigner(AuthConfig{AgentName: "test", SharedSecret: testSecret})
+	s, _ := newSigner(newAuthBuilder())
 	tok, _ := s.Sign()
 	parsed, _, _ := jwt.NewParser().ParseUnverified(tok, jwt.MapClaims{})
 	if parsed.Method.Alg() != "HS256" {
@@ -154,6 +215,7 @@ func TestClient_WithAuth_SetsBearerHeader(t *testing.T) {
 	c, err := New(srv.URL,
 		WithAuth(AuthConfig{
 			AgentName:    "test",
+			TenantID:     "test-tenant", // Stage 3.1 #1:必填
 			SharedSecret: testSecret,
 		}),
 		WithCircuitDisabled(), // 测试隔离,避免熔断短路

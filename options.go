@@ -60,9 +60,15 @@ func DefaultCircuitConfig() CircuitConfig {
 //
 // exp: 5 分钟(短;每次请求新签)
 // jti: UUID v4 防重放
+//
+// per Stage 3.1 #1 修复(2026-07-01):wau-edge Claims 必填 tenant_id(per
+// wau-edge/internal/auth/jwt.go:96-98)。SDK 必须签 tenant_id,否则 401。
+// Subject 对齐 wau-edge Claims.Subject(sub claim),缺省用 AgentName 兜底。
 type AuthConfig struct {
 	Role         Role   // RBAC role
-	AgentName    string // 标识当前 agent,放入 JWT
+	AgentName    string // 标识当前 agent,放入 JWT 'agent' claim
+	TenantID     string // 租户 ID(必填,wau-edge 必校验,空字符串 = newSigner 返错)
+	Subject      string // JWT 'sub' claim(可选;空 = 用 AgentName 兜底)
 	SharedSecret []byte // HS256 密钥(从环境变量读,不写死)
 }
 
