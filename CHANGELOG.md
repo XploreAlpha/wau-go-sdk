@@ -1,3 +1,15 @@
+## [v1.2.0] - 2026-07-02 (v0.9.0 GA)
+
+### Highlights
+
+- v1.2.0 (与 v0.9.0 "Acorn" 同步发版) + Stage 3.1 #10 Chat SSE streaming + 5 字段 100% 保留 + SDK doc 完整化
+- 详见 GA 收口报告:~/WAU-develop/develop-log/kernel/v0.9.0/wrapup/2026-07-02-PROGRESS-v0.9.0-GA-CLOSURE.md
+
+### Compatibility
+
+- API 100% 保留
+- LLMDecision 字段 100% 保留
+
 # Changelog
 
 ## [v1.0.0] "Amber" - 2026-07-25 (W7.7 GA 文档校准)
