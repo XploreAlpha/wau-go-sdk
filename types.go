@@ -241,3 +241,47 @@ type ChatCompletionResponse struct {
 	// WAU 扩展 — reason 是 wau-llm-router 的决策原因,debug / audit 用
 	Reason string `json:"reason,omitempty"`
 }
+
+// ============== Streaming SSE types(per Stage 3.1 #10, 2026-07-02)==============
+//
+// OpenAI ChatCompletionChunk 协议 1:1 对齐(per https://platform.openai.com/docs/api-reference/chat-streaming)。
+// 4 SDK 通用字段(per Stage 0 4 SDK 5/5 字段对齐)。
+//
+// 完整链路:SDK → wau-edge :18402 /v1/chat/completions?stream=true
+//                  → wau-llm-router :18404 Resolve(unary, 拿 userToken + model)
+//                  → new-api sidecar :3000 /v1/chat/completions?stream=true
+//                  → DeepSeek v4-flash reasoning model → SSE chunks
+//                  → 响应回 wau-edge → 编码 SSE → 响应回 SDK
+
+// ChunkDelta 是 OpenAI ChatCompletionChunk.choices[].delta 对象。
+//
+// Role 字段只在首 chunk 有值("assistant"),omitempty 保证其他 chunk 不出 role 字段。
+// Content 是增量字符流(wau-edge 7 chunks 验证 per C.1:"1" → "+" → "1" → "=" → "2")。
+type ChunkDelta struct {
+	Role    string `json:"role,omitempty"`
+	Content string `json:"content,omitempty"`
+}
+
+// ChunkChoice 是 OpenAI ChatCompletionChunk.choices[] 元素。
+//
+// FinishReason 字段在流中间为 null(per OpenAI 协议),结束 chunk 为 "stop" / "length"。
+// 用 *string 指针类型 + omitempty,序列化为 null 而非空串,严格对齐 OpenAI spec。
+type ChunkChoice struct {
+	Index        int        `json:"index"`
+	Delta        ChunkDelta `json:"delta"`
+	FinishReason *string    `json:"finish_reason"`
+}
+
+// ChatCompletionChunk 是 OpenAI ChatCompletion streaming 响应的一个 chunk。
+//
+// wau-edge handler.go handleStream (L204-273) 编码这种格式,SSE 包装为:
+//   data: {<JSON>}\n\n
+//
+// 终止标志:data: [DONE]\n\n(per stream.go WriteDone)
+type ChatCompletionChunk struct {
+	ID      string        `json:"id"`
+	Object  string        `json:"object"` // 固定 "chat.completion.chunk"
+	Created int64         `json:"created"`
+	Model   string        `json:"model"`
+	Choices []ChunkChoice `json:"choices"`
+}
