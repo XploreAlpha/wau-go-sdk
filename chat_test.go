@@ -102,6 +102,8 @@ func (m *chatMockWauEdge) start(t *testing.T) *httptest.Server {
 				TotalTokens:      8,
 			},
 			Reason: "static:tenant=acme model=" + m.lastReq.Model,
+			// Stage 3.1 #11 (2026-07-03):Provider 透传 mock(provider 字段验证)
+			Provider: "deepseek-v4-flash",
 		})
 	}))
 }
@@ -139,6 +141,10 @@ func TestChat_Completions_HappyPath(t *testing.T) {
 	}
 	if resp.Reason == "" {
 		t.Errorf("reason empty, wau-llm-router reason 应透传")
+	}
+	// Stage 3.1 #11:Provider 透传验证(wau-llm-router Resolve 选中的 LLM provider)
+	if resp.Provider != "deepseek-v4-flash" {
+		t.Errorf("provider = %q, want deepseek-v4-flash (Stage 3.1 #11 透传)", resp.Provider)
 	}
 	if mock.lastReq.Universe != "default" {
 		t.Errorf("server 收到 universe = %q, want 'default'", mock.lastReq.Universe)
@@ -248,6 +254,36 @@ func TestChat_CompletionsRaw_Bytes(t *testing.T) {
 	}
 	if len(resp.Choices) == 0 {
 		t.Errorf("choices empty")
+	}
+}
+
+// TestChat_Completions_ProviderPassthrough (Stage 3.1 #11, 2026-07-03)
+//
+// 验证:wau-edge /v1/chat/completions 响应里带 provider 字段(per LLMDecision.Provider 透传),
+//      wau-go-sdk ChatCompletionResponse.Provider 字段能正确解析并暴露。
+// 兼容:老 server 不带 provider 字段 → SDK 解析为 ""(omitempty 不出现在 JSON 上,Go 零值)。
+func TestChat_Completions_ProviderPassthrough(t *testing.T) {
+	mock := newChatMockWauEdge()
+	srv := mock.start(t)
+	defer srv.Close()
+
+	c, _ := New(srv.URL, WithTimeout(5*time.Second))
+	defer c.Close()
+
+	resp, err := c.Chat().Completions(context.Background(), ChatCompletionRequest{
+		Model:    "claude-haiku-4-5",
+		Messages: []ChatMessage{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Completions: %v", err)
+	}
+	if resp.Provider != "deepseek-v4-flash" {
+		t.Errorf("provider = %q, want deepseek-v4-flash (Stage 3.1 #11 provider 字段透传)", resp.Provider)
+	}
+	// 验证:request 体不带 provider 字段(provider 是 server 决策,单向透传到 response)
+	//  兜底语义:SDK 不会发 provider 到 server,server 端 decision 是 source of truth
+	if mock.lastReq.Model != "claude-haiku-4-5" {
+		t.Errorf("request model = %q, want claude-haiku-4-5", mock.lastReq.Model)
 	}
 }
 

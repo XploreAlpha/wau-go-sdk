@@ -240,6 +240,11 @@ type ChatCompletionResponse struct {
 	Usage   ChatUsage    `json:"usage"`
 	// WAU 扩展 — reason 是 wau-llm-router 的决策原因,debug / audit 用
 	Reason string `json:"reason,omitempty"`
+	// WAU 扩展 (Stage 3.1 #11, 2026-07-03) — provider 是 wau-llm-router Resolve 选中的
+	// LLM provider 名称(如 "deepseek-v4-flash" / "gpt-4o-mini" / "claude-haiku-4-5"),
+	// 透传自 wau-store 真相源,debug / audit / 成本归因用。
+	// 老调用方不读 → 无影响(omitempty 字段,缺省空串)。
+	Provider string `json:"provider,omitempty"`
 }
 
 // ============== Streaming SSE types(per Stage 3.1 #10, 2026-07-02)==============
