@@ -43,6 +43,7 @@ type Client struct {
 	intent    *IntentService
 	handshake *HandshakeService
 	chat      *ChatService
+	skills    *SkillsService
 	logger    *slog.Logger
 }
 
@@ -83,6 +84,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	c.intent = &IntentService{c: c}
 	c.handshake = &HandshakeService{c: c} // v0.8.0 M5-1 B.1
 	c.chat = &ChatService{c: c}          // v0.9.0 M3 §3.7
+	c.skills = &SkillsService{c: c}      // v1.0.0 M11 P4 (I 子项)
 	return c, nil
 }
 
@@ -120,6 +122,26 @@ func (c *Client) Handshake() *HandshakeService { return c.handshake }
 //
 // baseURL 应该指向 wau-edge(默认 :18402),不是 wau-core :18400(老路径)。
 func (c *Client) Chat() *ChatService { return c.chat }
+
+// Skills returns the SkillsService (v1.0.0 M11 P4 / I 子项)。
+//
+// 用法:
+//
+//	// 列出内置 skill
+//	skills, err := c.Skills().List(ctx, "default", true)
+//
+//	// 上架 B 端 skill bundle
+//	resp, err := c.Skills().Publish(ctx, wau.SkillPublishRequest{
+//	    Manifest: wau.SkillInfo{Name: "weather-bot", Version: "0.1.0", Entrypoint: "main.py"},
+//	    Bundle:   tarballBytes,
+//	})
+//
+//	// C 端 user 装 skill
+//	loaded, err := c.Skills().LoadForUser(ctx, "user-123", "weather", "bot-alpha", true)
+//
+// baseURL 默认指向 wau-core :18400(wau-go-sdk 复用 kernel transport),但
+// Publish/Load 调用走绝对路径 + multipart,wau-registry 自动适配。
+func (c *Client) Skills() *SkillsService { return c.skills }
 
 // Close releases SDK resources. Currently no-op; will be used by M3.1 gRPC client.
 func (c *Client) Close() error { return nil }

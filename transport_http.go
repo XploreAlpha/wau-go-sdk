@@ -44,6 +44,16 @@ func (t *transport) setAuthHeader(v string) {
 	t.mu.Unlock()
 }
 
+// authHeader 返回当前注入的 Authorization header 值(无则返空字符串)。
+//
+// 用于绕过 doWithRetry 直接发请求的代码路径(如 v1.0.0 M11 P4
+// SkillsService.Publish 的 multipart upload)。
+func (t *transport) authHeader() string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.authValue
+}
+
 // do 执行一次 HTTP 请求。
 //
 // 错误返回:
