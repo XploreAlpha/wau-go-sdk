@@ -169,3 +169,23 @@ git push origin v1.0.0
 +     TimeoutMs: 30000,
 + })
 ```
+
+## [Unreleased] — v1.0.0 "Phoenix" M10 W8 (2026-07-08)
+
+### Added
+
+#### M10 N1 — Bot 注册 DTO + BotsService 公共接口
+
+- `bot/common/account.go`(NEW,~102 行):
+  - `Account` struct:AccountID / TenantID / BotID / PublicBotID / OwnerUserID / ChannelType / ChannelConfigID / CreatedAt / UpdatedAt / LastSeenAt
+  - `NewAccount(tenantID, botID, ownerUserID, channelType, channelConfigID)` factory
+  - `PublicBotIDOf(tenantID, botID)` — D82=A 派生 `bot:<tenant>:<botid>`
+  - `RegisterBotRequest` / `UpdateBotRequest` / `ListBotsFilter` types
+- `bot/common/bots_service.go`(NEW,~60 行):
+  - `BotsService` interface:Register / Get / Update / List / Delete
+  - 3 sentinel errors:ErrBotNotFound / ErrBotAlreadyExists / ErrInvalidArgument
+
+#### Compatibility (D60)
+
+- `bot.Bot` interface / `IncomingMessage` / `OutgoingMessage` / `BotBuilder` 全部 0 改
+- 4 SDK 字段名 100% 一致(per D13)
