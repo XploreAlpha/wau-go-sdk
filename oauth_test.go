@@ -168,3 +168,173 @@ func TestRefreshableTokenStore_NoRefreshBeforeExpiry(t *testing.T) {
 		t.Errorf("expected 1 server call (no refresh needed), got %d", mts.callCount)
 	}
 }
+// ============================================================================
+// v1.0.0 M4 OAuth 增强 (2026-07-08) unit tests
+// 覆盖:RefreshToken() 公开方法 + GeneratePKCEChallenge() 幂等性 + PKCE URL 构造
+// ============================================================================
+
+func TestM4_RefreshToken_PublicMethod(t *testing.T) {
+	// mock 同时处理 client_credentials + refresh_token grant
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		grant := r.Form.Get("grant_type")
+		w.Header().Set("Content-Type", "application/json")
+		switch grant {
+		case "client_credentials":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"access_token":  "initial-access-token",
+				"token_type":    "Bearer",
+				"expires_in":    3600,
+				"refresh_token": "original-refresh-token",
+				"scope":         "read:agents",
+			})
+		case "refresh_token":
+			if r.Form.Get("refresh_token") != "original-refresh-token" {
+				t.Errorf("expected refresh_token=original-refresh-token, got %s", r.Form.Get("refresh_token"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"access_token":  "rotated-access-token-new",
+				"token_type":    "Bearer",
+				"expires_in":    3600,
+				"refresh_token": "rotated-refresh-token-new",
+				"scope":         "read:agents",
+			})
+		default:
+			t.Errorf("unexpected grant_type: %s", grant)
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}))
+	defer srv.Close()
+
+	oc, err := NewOAuthClient(OAuthConfig{
+		Endpoint:     srv.URL,
+		ClientID:     "client-test",
+		ClientSecret: "secret-test",
+		Scope:        "read:agents",
+	})
+	if err != nil {
+		t.Fatalf("NewOAuthClient: %v", err)
+	}
+
+	// 1. ClientCredentials 拿初始 store
+	store, err := oc.ClientCredentials(context.Background())
+	if err != nil {
+		t.Fatalf("ClientCredentials: %v", err)
+	}
+	// 不调 Token()(避免双检:access 未过期,RefreshToken 显式触发 OK)
+	_ = store
+
+	// 2. 显式调 RefreshToken
+	if err := store.RefreshToken(context.Background()); err != nil {
+		t.Fatalf("RefreshToken: %v", err)
+	}
+	pair := store.CurrentPair()
+	if pair.AccessToken != "rotated-access-token-new" {
+		t.Errorf("expected rotated-access-token-new, got %s", pair.AccessToken)
+	}
+	if pair.RefreshToken != "rotated-refresh-token-new" {
+		t.Errorf("expected rotated-refresh-token-new, got %s", pair.RefreshToken)
+	}
+}
+
+func TestM4_GeneratePKCEChallenge_Properties(t *testing.T) {
+	a, err := GeneratePKCEChallenge()
+	if err != nil {
+		t.Fatalf("GeneratePKCEChallenge: %v", err)
+	}
+	b, err := GeneratePKCEChallenge()
+	if err != nil {
+		t.Fatalf("GeneratePKCEChallenge (2nd): %v", err)
+	}
+	if a.Verifier == b.Verifier {
+		t.Error("two PKCE challenges should have different verifiers")
+	}
+	if a.Method != "S256" {
+		t.Errorf("expected method=S256, got %s", a.Method)
+	}
+	if len(a.Verifier) < 43 {
+		t.Errorf("verifier too short: %d chars", len(a.Verifier))
+	}
+	if len(a.Challenge) < 43 {
+		t.Errorf("challenge too short: %d chars", len(a.Challenge))
+	}
+}
+
+func TestM4_PKCEClient_AuthorizationURL(t *testing.T) {
+	pc, err := NewPKCEClient(PKCEConfig{
+		AuthEndpoint:  "https://wau.example.com/oauth/authorize",
+		TokenEndpoint: "https://wau.example.com/oauth/token",
+		ClientID:      "wau-sdk-pkce-test",
+		RedirectURI:   "https://myapp.com/callback",
+		Scopes:        []string{"read:agents", "write:agents"},
+	})
+	if err != nil {
+		t.Fatalf("NewPKCEClient: %v", err)
+	}
+	chal, _ := GeneratePKCEChallenge()
+	urlStr := pc.AuthorizationURL(context.Background(), "state-csrf-token-123", chal)
+
+	if !strings.Contains(urlStr, "response_type=code") {
+		t.Error("URL missing response_type=code")
+	}
+	if !strings.Contains(urlStr, "code_challenge="+chal.Challenge) {
+		t.Error("URL missing code_challenge")
+	}
+	if !strings.Contains(urlStr, "code_challenge_method=S256") {
+		t.Error("URL missing code_challenge_method=S256")
+	}
+	if !strings.Contains(urlStr, "state=state-csrf-token-123") {
+		t.Error("URL missing state")
+	}
+	if !strings.Contains(urlStr, "client_id=wau-sdk-pkce-test") {
+		t.Error("URL missing client_id")
+	}
+	if !strings.Contains(urlStr, "scope=read%3Aagents+write%3Aagents") {
+		t.Errorf("URL missing scope: %s", urlStr)
+	}
+}
+
+func TestM4_PKCEClient_ExchangeCode(t *testing.T) {
+	// 模拟 wau-edge /oauth/token 端点(走 authorization_code grant)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		if r.Form.Get("grant_type") != "authorization_code" {
+			t.Errorf("expected grant_type=authorization_code, got %s", r.Form.Get("grant_type"))
+		}
+		if r.Form.Get("code") != "auth-code-from-redirect" {
+			t.Errorf("unexpected code: %s", r.Form.Get("code"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"access_token":  "pkce-access-token",
+			"token_type":    "Bearer",
+			"expires_in":    3600,
+			"refresh_token": "pkce-refresh-token",
+			"scope":         "read:agents",
+		})
+	}))
+	defer srv.Close()
+
+	pc, _ := NewPKCEClient(PKCEConfig{
+		AuthEndpoint:  "https://wau.example.com/oauth/authorize",
+		TokenEndpoint: srv.URL, // mock
+		ClientID:      "wau-sdk-pkce-test",
+		RedirectURI:   "https://myapp.com/callback",
+		Scopes:        []string{"read:agents"},
+	})
+
+	store, err := pc.ExchangeCode(context.Background(), "auth-code-from-redirect", "test-verifier-abc")
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if store == nil {
+		t.Fatal("store is nil")
+	}
+	tok, err := store.Token(context.Background())
+	if err != nil {
+		t.Fatalf("store.Token: %v", err)
+	}
+	if tok != "pkce-access-token" {
+		t.Errorf("expected pkce-access-token, got %s", tok)
+	}
+}

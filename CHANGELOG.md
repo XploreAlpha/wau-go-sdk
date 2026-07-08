@@ -189,3 +189,10 @@ git push origin v1.0.0
 
 - `bot.Bot` interface / `IncomingMessage` / `OutgoingMessage` / `BotBuilder` 全部 0 改
 - 4 SDK 字段名 100% 一致(per D13)
+
+#### M4 OAuth 增强 (2026-07-08)
+- `RefreshableTokenStore.RefreshToken(ctx)` 公开方法(force=true 绕过双检,显式触发 refresh)
+- `RefreshableTokenStore.CurrentPair() TokenPair` 返当前 token pair(明文,持久化用)
+- `PKCEClient` + `PKCEConfig` + `GeneratePKCEChallenge()` Authorization Code + PKCE 公共 client 支持
+- 0 改老 OAuthClient + 老 RefreshableTokenStore(D60 additive)
+- 4 unit tests PASS(refreshToken + PKCE challenge + URL + exchange)
