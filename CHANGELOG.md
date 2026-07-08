@@ -1,3 +1,26 @@
+## [Unreleased] — v1.0.0 "Phoenix" M11 W8 (2026-07-08)
+
+### Added
+
+#### M2 OAuth (ClientCredentials)
+- `OAuthClient` + `TokenStore` + `RefreshHook`(sync + async)
+- `transport_http.go` 新增 `authHeader()` getter
+- `Client.SetOAuth()` additive(D60 老契约 0 改)
+- 12 unit tests PASS
+
+#### M11 P4 SkillsService (B 端 SDK)
+- `SkillsService.List/Get/LoadForUser/ListForUser`
+- `SkillsService.Publish(multipart upload, direct HTTP bypass retry)
+- per `agentskills.io` D69=A manifest spec
+- 5 unit tests PASS / D60 0 改老契约
+
+### Compatibility
+
+- API 100% 保留(Client / LLMDecision / SkillInfo / Transport / Auth 等老公开契约 0 改)
+- 仅 additive 新增 OAuth + Skills 字段
+
+---
+
 ## [v1.2.0] - 2026-07-02 (v0.9.0 GA)
 
 ### Highlights
