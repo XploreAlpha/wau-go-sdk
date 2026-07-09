@@ -1,3 +1,22 @@
+## [Unreleased] — v1.3.0 "bot_uuid field add (W7.1, 2026-07-09)"
+
+### Added
+
+- `bot_uuid` (UUID v4, server-assigned) field added to `Account` + `RegisterBotRequest` structs in `bot/common/account.go`
+- Per D78/D79/D80 decisions; D60 additive, 0 breaking change
+- Cross-SDK JSON byte-equal alignment per D13
+- 老 SDK v1.2.0 向后兼容(server 自动从 BotID slug 寻址并生成 bot_uuid)
+- 0 unit tests added (W7.2 will add 15 mock e2e tests for 5 platforms × 3 cases)
+
+### Compatibility
+
+- 100% 保持向后兼容 — `bot_uuid` 字段是 `omitempty`,老 client 不传 = server 自动生成
+- 老 9 字段(`account_id, tenant_id, bot_id, public_bot_id, owner_user_id, channel_type, channel_config_id, created_at, updated_at`) 0 改
+- 老 `BotID` slug 语义不变(tenant-local, client-supplied)
+- 跟 D66=B RBAC 兼容(`owner_user_id` 维持 string)
+
+---
+
 ## [Unreleased] — v1.0.0 "Phoenix" M11 W8 (2026-07-08)
 
 ### Added

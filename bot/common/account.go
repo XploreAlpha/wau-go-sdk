@@ -8,6 +8,9 @@
 // wau-typescript-sdk/src/bot/common/account.ts
 // wau-rust-sdk/src/bot/common/account.rs
 // 必须随时保持同步,字段一字不差。
+//
+// v1.3.0 (W7.1, 2026-07-09) — 新加 BotUUID (UUID v4, server-assigned)
+// per D78/D79/D80 拍板;D60 additive,0 改老字段。老 BotID slug 语义不变。
 package botcommon
 
 import (
@@ -28,6 +31,12 @@ type Account struct {
 
 	// BotID 本地名 / slug(必填,例 "weather-cn")。在 tenant 内唯一
 	BotID string `json:"bot_id"`
+
+	// BotUUID 服务端分配的 UUID v4(per D78,per tenant 全局唯一)。
+	// 与 BotID slug 不同:BotID = human-readable client-supplied,BotUUID = machine-friendly server-assigned。
+	// 用途:wau-edge route 寻址 / wau-channel 8 平台 adapter 寻址 / D79 JWT 4 claims 之一。
+	// Register 响应返回(服务端决定,不接受 client 上传)。空 = 老 SDK v1.2.0 兼容降级路径。
+	BotUUID string `json:"bot_uuid,omitempty"`
 
 	// PublicBotID 全局公开 ID(由 TenantID + BotID 派生,D82=A)
 	// 例:tenant=acme + bot=weather-cn → "bot:acme:weather-cn"
@@ -81,9 +90,12 @@ func PublicBotIDOf(tenantID, botID string) string {
 //
 // 与 Account 区别:请求体不带 AccountID / CreatedAt / UpdatedAt
 // (这些是服务端回填的字段)。
+// v1.3.0 (W7.1, D78) — 新增 BotUUID 字段(可选,server-assigned,
+// 不传 = 老 SDK v1.2.0 兼容路径,server 自动从 BotID slug 寻址并生成)。
 type RegisterBotRequest struct {
 	TenantID        string `json:"tenant_id"`
 	BotID           string `json:"bot_id"`
+	BotUUID         string `json:"bot_uuid,omitempty"`
 	OwnerUserID     string `json:"owner_user_id"`
 	ChannelType     string `json:"channel_type"`
 	ChannelConfigID string `json:"channel_config_id"`
