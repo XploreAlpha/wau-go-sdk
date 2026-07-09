@@ -8,6 +8,16 @@ require (
 	github.com/google/uuid v1.6.0
 )
 
+// W6.1 (2026-07-09) Stage 1 dep 追加 — 5 平台 SDK native integration
+// 沿用 wau-channel 8 平台 adapter 模板 (W7 2026-07-07 SDK 接通)
+require (
+	github.com/slack-go/slack v0.15.0                       // Slack socketmode + RTM
+	github.com/larksuite/oapi-sdk-go/v3 v3.9.8              // Feishu/Lark EventReceiver
+	github.com/tencent-connect/botgo v0.2.1                 // QQ OpenAPI v2 websocket
+	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.1  // DingTalk StreamCallback
+	github.com/emersion/go-imap v1.2.1                      // Email IMAP IDLE (SMTP 用 stdlib net/smtp)
+)
+
 require (
 	github.com/bwmarrin/discordgo v0.29.0 // indirect
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1 // indirect
