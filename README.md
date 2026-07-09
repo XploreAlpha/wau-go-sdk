@@ -125,13 +125,15 @@ WAU SDK 通过两段责任分工对接 N 个 Bot 平台:
 | Telegram     | ✅ | ✅ | 双端完整 |
 | Discord      | ✅ | ✅ | 双端完整 |
 | Webhook      | ✅ | ✅ | 双端完整 |
-| Slack        | ✅ Stage 0 | ✅ 完整 4 步(`slack-go/slack` v0.27+) | W5 Stage 0 stub, Stage 1 待补 |
-| Feishu       | ✅ Stage 0 | ✅ 完整 4 步(`lark-oapi` v3) | W5 Stage 0 stub, Stage 1 待补 |
-| QQ           | ✅ Stage 0 | ✅ 完整 4 步(`tencent-connect/botgo`) | W5 Stage 0 stub, Stage 1 待补 |
-| DingTalk     | ✅ Stage 0 | ✅ 完整 4 步(`dingtalk-stream-sdk`) | W5 Stage 0 stub, Stage 1 待补 |
-| Email        | ✅ Stage 0 | ✅ 完整 4 步(`go-imap v1` + `net/smtp`) | W5 Stage 0 stub, Stage 1 待补 |
+| Slack        | ✅ Stage 1 native | ✅ 完整 4 步(`slack-go/slack` v0.27.0 socketmode + RTM) | W6.2 closure: socketmode client + RTM 监听 (~244 LoC) |
+| Feishu       | ✅ Stage 1 native | ✅ 完整 4 步(`larksuite/oapi-sdk-go/v3` v3.9.8) | W6.2 closure: EventReceiver 集成 (~264 LoC) |
+| QQ           | ✅ Stage 1 native | ✅ 完整 4 步(`tencent-connect/botgo` v0.2.1) | W6.2 closure: OpenAPI v2 websocket 集成 (~272 LoC) |
+| DingTalk     | ✅ Stage 1 native | ✅ 完整 4 步(`open-dingtalk/dingtalk-stream-sdk-go` v0.9.1) | W6.2 closure: StreamCallback 长连接 (~245 LoC) |
+| Email        | ✅ Stage 1 native | ✅ 完整 4 步(`emersion/go-imap` v1.2.1 + stdlib `net/smtp`) | W6.2 closure: IMAP IDLE + SMTP 发送 (~363 LoC) |
 
 > **W5 反 W4.1 设计反转**(per 2026-07-13 Q1=B 拍板):SDK 端 bot/ 现已支持 8 平台(原 W4.1 仅 3 平台);5 平台 (Slack/Feishu/QQ/DingTalk/Email) 走 SDK 端 Stage 0 stub 替代原"⛔ 走服务端 adapter"。Stage 1 路径(per M11 W5-W6)将替换 stub 为 native SDK integration。W7 之后 wau-channel 8 平台 adapter 全部完整(per W7 2026-07-07 SDK 接通)。
+>
+> **W6.2 closure (2026-07-09)**:5 平台 (Slack/Feishu/QQ/DingTalk/Email) Stage 0 stub → Stage 1 native SDK integration 100% 收口(per M10 N1 + D13 + D78 + D80 公共契约)。
 
 **使用范式**(4 SDK 一致,Go SDK 示例):
 
