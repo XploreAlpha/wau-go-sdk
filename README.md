@@ -107,3 +107,44 @@ bot.Start() // 监听消息 + 自动转 Task
 ## 协议
 
 MIT © 2026 youhaoxi
+## Bot Platforms
+
+WAU SDK 通过两段责任分工对接 N 个 Bot 平台:
+
+| 责任段 | 仓 | 文件 | 覆盖范围 |
+|---|---|---|---|
+| **公共契约** | 本 SDK(`bot/common/bots_service.<ext>`) | `Bot` + `BotsService` 抽象接口 | 4 SDK 100% 一致(per M10 N1)|
+| **C 端 SDK bot/ 子包** | 本 SDK | `bot/{telegram,discord,webhook}/` | 每个 SDK 自带 3 平台(telegram / discord / webhook)|
+| **服务端 5 平台 adapter** | `wau-channel` | `internal/adapter/{slack,feishu,dingtalk,qq,email}/*_real.go` | Slack + Feishu 完整 4 步;DingTalk + Email + QQ 降级版(per W7 SDK 接通)|
+| **服务端 bot HTTP API** | `wau-edge` | `/v1/bots/{bot_id}/messages`(per M10 N3) | Bot → 后端路由 |
+
+**Bot Platforms 公开能力表**(2026-07-13):
+
+| Platform     | 本 SDK bot/ | wau-channel adapter | 状态 |
+|--------------|-------------|---------------------|------|
+| Telegram     | ✅ | — | 4 SDK 自带 |
+| Discord      | ✅ | — | 4 SDK 自带 |
+| Webhook      | ✅ | — | 4 SDK 自带 |
+| Slack        | ⛔ | ✅ 完整 4 步(`slack-go/slack` v0.27+)| 走服务端 adapter |
+| Feishu       | ⛔ | ✅ 完整 4 步(`lark-oapi` v3)| 走服务端 adapter |
+| QQ           | ⛔ | ⚠️ 降级版(`tencent-connect/botsdk` mock)| 待 W7 SDK 接通后替换 |
+| DingTalk     | ⛔ | ⚠️ 降级版(`dingtalk-stream-sdk` mock)| 待 W7 SDK 接通后替换 |
+| Email        | ⛔ | ⚠️ 降级版(`go-imap v1` + `net/smtp` mock)| 待 W7 SDK 接通后替换 |
+
+**使用范式**(4 SDK 一致,Go SDK 示例):
+
+```go
+// SDK 端(B 端开发者):通过 BotsService 公共契约操作 bot
+client.Bots().Register(ctx, wau.RegisterBotRequest{
+    TenantID:     "acme",
+    Universe:     "default",
+    PublicBotID:  "weather-bot",
+})
+
+// 平台通信端:平台 SDK 自动选择 — 通过 wau-channel 服务端 adapter 调用
+// SDK 不需要直接 import slack/feishu/... — 走 wau-channel HTTP API
+```
+
+> **本节由 W4.1 README 标准化自动 append,2026-07-13**。D60 additive:0 改 README 老内容。
+>
+> 关联:`WAU-develop/develop-log/kernel/v1.0.0/stage2/2026-07-13-PROGRESS-W4-launch.md`
