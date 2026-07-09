@@ -37,6 +37,18 @@ const (
 	DefaultRecoveryTimeout = 30 * time.Second
 )
 
+// KeyFor 返回 breaker 内部用的复合 key。
+//
+// v1.0.0 M3 子项 4 (2026-07-06):failover 需要 per-(agent,provider) 独立熔断,
+// 避免一个 provider 5xx 把整个 agent 永久半开。
+// 老 caller 只传 agentID 时等价 KeyFor(agentID, ""),与 v0.7 行为一致。
+func KeyFor(agentID, providerID string) string {
+	if providerID == "" {
+		return agentID
+	}
+	return agentID + "|" + providerID
+}
+
 // Breaker 熔断器
 type Breaker struct {
 	logger *slog.Logger
@@ -148,14 +160,114 @@ func (cb *Breaker) IsOpen(agentIDs ...string) bool {
 	return false
 }
 
-// Reset 重置熔断状态
-func (cb *Breaker) Reset(agentID string) {
+// RecordFailureProvider 记录 (agentID, providerID) 的一次失败。
+//
+// v1.0.0 M3 子项 4 (2026-07-06):per-provider 独立计数,避免主路径 5xx 把全
+// agent 半开。新 caller (wau-edge failover) 用;老 caller 继续走 RecordFailure(agentID)
+// 等价于 RecordFailureProvider(agentID, "")。
+func (cb *Breaker) RecordFailureProvider(agentID, providerID string) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
-	delete(cb.states, agentID)
-	delete(cb.failures, agentID)
-	delete(cb.lastFailure, agentID)
+	key := KeyFor(agentID, providerID)
+	cb.failures[key]++
+	cb.lastFailure[key] = time.Now()
+
+	if cb.states[key] == CircuitHalfOpen {
+		cb.states[key] = CircuitOpen
+		cb.logger.Warn("Circuit breaker re-opened from half-open",
+			"agent", agentID,
+			"provider", providerID,
+		)
+		return
+	}
+
+	if cb.states[key] == CircuitClosed && cb.failures[key] >= cb.failureThreshold {
+		cb.states[key] = CircuitOpen
+		cb.logger.Warn("Circuit breaker opened",
+			"agent", agentID,
+			"provider", providerID,
+			"failures", cb.failures[key],
+		)
+	}
+}
+
+// RecordSuccessProvider 记录 (agentID, providerID) 的一次成功。
+func (cb *Breaker) RecordSuccessProvider(agentID, providerID string) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	key := KeyFor(agentID, providerID)
+	cb.failures[key] = 0
+
+	if cb.states[key] == CircuitHalfOpen {
+		cb.states[key] = CircuitClosed
+		cb.logger.Info("Circuit breaker closed",
+			"agent", agentID,
+			"provider", providerID,
+		)
+	}
+}
+
+// GetStateForProvider 获取 (agentID, providerID) 的熔断状态。
+func (cb *Breaker) GetStateForProvider(agentID, providerID string) CircuitState {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	key := KeyFor(agentID, providerID)
+	state, exists := cb.states[key]
+	if !exists {
+		return CircuitClosed
+	}
+	switch state {
+	case CircuitClosed:
+		return CircuitClosed
+	case CircuitOpen:
+		if lastFail, ok := cb.lastFailure[key]; ok {
+			if time.Since(lastFail) > cb.recoveryTimeout {
+				cb.states[key] = CircuitHalfOpen
+				return CircuitHalfOpen
+			}
+		}
+		return CircuitOpen
+	case CircuitHalfOpen:
+		return CircuitHalfOpen
+	default:
+		return CircuitClosed
+	}
+}
+
+// IsOpenForProviders 检查任何 (agentID, providerID) 组合是否熔断中。
+//
+// wau-edge failover 用:开始新一轮调用前遍历已试过的 provider,
+// 任一仍 open → 整体熔断 fail-fast。
+// variadic 对 providerID:变参形式 `IsOpenForProviders(agentID, p1, p2, p3)`。
+func (cb *Breaker) IsOpenForProviders(agentID string, providerIDs ...string) bool {
+	for _, p := range providerIDs {
+		if cb.GetStateForProvider(agentID, p) == CircuitOpen {
+			return true
+		}
+	}
+	return false
+}
+
+// Reset 重置熔断状态
+func (cb *Breaker) Reset(agentID string) {
+	cb.ResetForProvider(agentID, "")
+}
+
+// ResetForProvider 重置熔断状态(per-provider)
+//
+// v1.0.0 M3 子项 4 (2026-07-06):failover 链路需要 per-(agent,provider) 独立熔断 +
+// 独立重置。providerID 为空时等价 Reset(agentID),与老行为一致。
+func (cb *Breaker) ResetForProvider(agentID, providerID string) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	key := KeyFor(agentID, providerID)
+	delete(cb.states, key)
+	delete(cb.failures, key)
+	delete(cb.lastFailure, key)
 }
 
 // SetFailureThreshold 设置失败阈值
