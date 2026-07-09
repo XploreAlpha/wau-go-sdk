@@ -1,10 +1,15 @@
-// Package botslack — Slack Bot SDK 集成(W5 OSS-onboarding closure, 2026-07-13)。
+// Package botslack — Slack Bot SDK 集成(W6.2 Stage 1 native SDK integration, 2026-07-09)。
 //
-// 完整 SDK 端实现(per W5 Q1=B 反 W4.1 拍板):
-//   - Stage 0 stub(per Python/TS/Rust telegram 模式,~150 LoC 公共契约对齐)
-//   - Stage 1 路径:接入 github.com/slack-go/slack v0.27+ + slack-go/socketmode
+// Stage 1 native 实现(替换 W5 Stage 0 stub):
+//   - 长连接:github.com/slack-go/slack + slack-go/socketmode(Socket Mode WS)
+//   - 发送 / 编辑:slack.Client.PostMessage(chat.postMessage) / UpdateMessage(chat.update)
+//   - 事件流:socketmode.EventTypeEventsAPI → slackevents.MessageEvent → IncomingMessage
 //   - 公共 Bot interface 沿用 M10 N1 拍板(Start/Stop/OnMessage/WithTenant/WithUniverse)
-//   - 仍走 wau-edge POST /v1/bots/{bot_id}/messages 注册(per M10 N3)
+//   - SubmitToCore 走 wau-core-kernel wau.Client.Tasks().Submit(per W7 模板)
+//
+// 协议合规(per wau-channel/adapter/slack/slack_real.go W7 2026-07-07 SDK 接通):
+//   - D60 additive:老 bot/ 子包(telegram/discord/webhook)0 改动
+//   - 公共 Bot interface 5 方法签名一字不改
 //
 // 字段对齐 per D13 拍板:与 wau-channel/adapter + 4 SDK bot/common/ 100% 一致。
 package botslack
@@ -13,6 +18,11 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
+
+	"github.com/slack-go/slack"
+	"github.com/slack-go/slack/slackevents"
+	"github.com/slack-go/slack/socketmode"
 
 	wau "github.com/wau/wau-go-sdk"
 	botcommon "github.com/wau/wau-go-sdk/bot/common"
@@ -24,7 +34,7 @@ const (
 	defaultTimeoutMs    = 30000
 )
 
-// SlackBot Slack Bot SDK 集成主结构。
+// SlackBot Slack Bot SDK 集成主结构(Stage 1 native)。
 type SlackBot struct {
 	BotToken string
 	AppToken string
@@ -32,9 +42,16 @@ type SlackBot struct {
 	Universe string
 	Handler  func(botcommon.IncomingMessage) botcommon.OutgoingMessage
 	client   *wau.Client
-	mu       sync.Mutex
-	running  bool
-	stopped  chan struct{}
+
+	// native SDK 句柄(Start 时构造)
+	api   *slack.Client
+	sm    *socketmode.Client
+	botID string
+
+	mu      sync.Mutex
+	running bool
+	cancel  context.CancelFunc
+	stopped chan struct{}
 }
 
 // 编译期 interface assertion — 强制实现 Bot 公共契约。
@@ -79,17 +96,98 @@ func (b *SlackBot) OnMessage(handler func(botcommon.IncomingMessage) botcommon.O
 
 // Start 启动 Slack Socket Mode(WS 长连接,接收事件)。
 //
-// Stage 0 stub:仅设置 running flag,真实 Socket Mode 连接在 Stage 1 实现。
+// 步骤:
+//  1. 校验 token(0 门槛 UX:fail-fast)
+//  2. slack.New + slack.OptionAppLevelToken
+//  3. AuthTest 拿 botID(D80 透传,自身消息过滤用)
+//  4. socketmode.New(api) + 后台 goroutine RunContext + 事件循环
 func (b *SlackBot) Start(ctx context.Context) error {
 	b.mu.Lock()
 	if b.running {
 		b.mu.Unlock()
 		return fmt.Errorf("slack bot already running")
 	}
+	if b.BotToken == "" || b.AppToken == "" {
+		b.mu.Unlock()
+		return fmt.Errorf("botslack: bot/app token required (Socket Mode needs xoxb- + xapp-)")
+	}
+
+	b.api = slack.New(b.BotToken, slack.OptionAppLevelToken(b.AppToken))
+	auth, err := b.api.AuthTestContext(ctx)
+	if err != nil {
+		b.mu.Unlock()
+		return fmt.Errorf("botslack: auth.test failed: %w", err)
+	}
+	b.botID = auth.UserID
+	b.sm = socketmode.New(b.api)
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	b.cancel = cancel
 	b.running = true
 	b.mu.Unlock()
-	// Stage 1: 实例化 slack.New(b.BotToken, slack.OptionAppLevelToken(b.AppToken)) + socketmode
+
+	go func() { _ = b.sm.RunContext(runCtx) }()
+	go b.eventLoop(runCtx)
 	return nil
+}
+
+// eventLoop 消费 socketmode 事件流,过滤 message 事件后 dispatch。
+func (b *SlackBot) eventLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case evt, ok := <-b.sm.Events:
+			if !ok {
+				return
+			}
+			if evt.Type != socketmode.EventTypeEventsAPI {
+				continue
+			}
+			apiEvent, ok := evt.Data.(slackevents.EventsAPIEvent)
+			if !ok {
+				continue
+			}
+			if evt.Request != nil {
+				_ = b.sm.Ack(*evt.Request)
+			}
+			if apiEvent.Type != slackevents.CallbackEvent {
+				continue
+			}
+			msgEvt, ok := apiEvent.InnerEvent.Data.(*slackevents.MessageEvent)
+			if !ok || msgEvt == nil {
+				continue
+			}
+			// 过滤自身 bot 消息 + 子类型事件(edited/deleted 等)
+			if msgEvt.User == "" || msgEvt.User == b.botID || msgEvt.BotID != "" {
+				continue
+			}
+			b.dispatch(ctx, msgEvt)
+		}
+	}
+}
+
+// dispatch 归一化为 IncomingMessage → Handler → PostMessage 回复。
+func (b *SlackBot) dispatch(ctx context.Context, e *slackevents.MessageEvent) {
+	if b.Handler == nil {
+		return
+	}
+	in := botcommon.IncomingMessage{
+		PlatformMsgID: e.TimeStamp,
+		ChannelID:     e.Channel,
+		UserID:        e.User,
+		Username:      e.Username,
+		Text:          e.Text,
+		ReplyTo:       e.ThreadTimeStamp,
+		Timestamp:     time.Now(),
+	}
+	out := b.Handler(in)
+	if out.Text == "" {
+		return
+	}
+	if _, err := b.PostMessage(ctx, e.Channel, out.Text); err != nil {
+		return
+	}
 }
 
 // Stop 优雅停止 Slack Bot。
@@ -100,33 +198,37 @@ func (b *SlackBot) Stop(ctx context.Context) error {
 		return nil
 	}
 	b.running = false
+	if b.cancel != nil {
+		b.cancel()
+	}
 	close(b.stopped)
 	return nil
 }
 
-// PostMessage 公开方法(对应 5-method interface 模式)。
-//
-// Stage 0 stub:仅返回 mock message ID,真实 PostMessage 在 Stage 1 实现。
+// PostMessage 调 slack-go/slack chat.postMessage,返回 message TS。
 func (b *SlackBot) PostMessage(ctx context.Context, channel, text string) (string, error) {
-	if !b.running {
+	if !b.running || b.api == nil {
 		return "", fmt.Errorf("slack bot not running")
 	}
-	// Stage 1: b.api.PostMessage(channel, slack.MsgOptionText(text, false))
-	return "slack.mock.msg." + channel, nil
+	_, ts, err := b.api.PostMessageContext(ctx, channel, slack.MsgOptionText(text, false))
+	if err != nil {
+		return "", fmt.Errorf("botslack: %s", userFacingErrPrefix)
+	}
+	return ts, nil
 }
 
-// UpdateMessage 公开方法(对应 5-method interface 模式)。
-//
-// Stage 0 stub:仅返回 nil,真实 UpdateMessage 在 Stage 1 实现。
+// UpdateMessage 调 slack-go/slack chat.update(streaming edit 用)。
 func (b *SlackBot) UpdateMessage(ctx context.Context, channel, ts, newText string) error {
-	if !b.running {
+	if !b.running || b.api == nil {
 		return fmt.Errorf("slack bot not running")
 	}
-	// Stage 1: b.api.UpdateMessage(channel, ts, slack.MsgOptionText(newText, false))
+	if _, _, _, err := b.api.UpdateMessageContext(ctx, channel, ts, slack.MsgOptionText(newText, false)); err != nil {
+		return fmt.Errorf("botslack: %s", userFacingErrPrefix)
+	}
 	return nil
 }
 
-// SubmitToCore 走 wau-core-kernel 提交 prompt(per W4.1 公共契约)。
+// SubmitToCore 走 wau-core-kernel 提交 prompt(per W7 模板)。
 func (b *SlackBot) SubmitToCore(ctx context.Context, prompt string) (string, error) {
 	if b.client == nil {
 		return "", fmt.Errorf("wau client not set; call WithClient first")
