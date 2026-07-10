@@ -17,6 +17,32 @@
 
 ---
 
+## [Unreleased] — v1.3.1 "L5 包管理器 client (W2.5, 2026-07-10, per D72/D73/D74)"
+
+### Added
+
+- `L5Service` + 5 client method(走 WAU-core-kernel /v1/l5/* HTTP API):
+  - `Install(ctx, L5InstallRequest)`    装 agent(类比 apt install / npm install)
+  - `Uninstall(ctx, L5UninstallRequest)` 卸 agent(purge=true 全删)
+  - `Update(ctx, L5UpdateRequest)`       更新 agent(agent_name="" = 全更新)
+  - `Search(ctx, L5SearchRequest)`       搜 wau-registry
+  - `Login(ctx, L5LoginRequest)`         登入 WAU 账户
+- 5 request/response struct + `L5SearchHit`
+- `Client.L5()` getter(跟 `Client.Agents()` / `Client.Tasks()` / `Client.Kernel()` / `Client.Intent()` / `Client.Handshake()` / `Client.Chat()` / `Client.Skills()` 同模式)
+- 9 unit tests(httptest + mock L5 server)覆盖 5 method 全 happy + 错误 path
+
+### Compatibility (D60 additive)
+
+- 0 改老 7 service(Agents/Tasks/Kernel/Intent/Handshake/Chat/Skills)
+- 走 `c.doWithRetry`(自动 HS256 + 熔断 + 重试),跟其他 service 一致
+
+### Reference
+
+- D74 A 拍板(gRPC InstallAgent):[stage1/01-D66-D74-9-decisions-summary#九](https://github.com/wau-network/WAU-develop/blob/main/develop-log/kernel/v1.0.0/stage1/01-D66-D74-9-decisions-summary.md)
+- 设计 doc:[stage1/04-wau-toolkit-v2.0-OS-level-design.md](https://github.com/wau-network/WAU-develop/blob/main/develop-log/kernel/v1.0.0/stage1/04-wau-toolkit-v2.0-OS-level-design.md)
+
+---
+
 ## [Unreleased] — v1.0.0 "Phoenix" M11 W8 (2026-07-08)
 
 ### Added
