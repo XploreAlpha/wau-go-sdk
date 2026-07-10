@@ -44,6 +44,7 @@ type Client struct {
 	handshake *HandshakeService
 	chat      *ChatService
 	skills    *SkillsService
+	l5        *L5Service
 	logger    *slog.Logger
 }
 
@@ -85,6 +86,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	c.handshake = &HandshakeService{c: c} // v0.8.0 M5-1 B.1
 	c.chat = &ChatService{c: c}          // v0.9.0 M3 §3.7
 	c.skills = &SkillsService{c: c}      // v1.0.0 M11 P4 (I 子项)
+	c.l5 = &L5Service{c: c}              // v1.0.0 M11 P4.5 (D72/D73/D74, 2026-07-10)
 	return c, nil
 }
 
@@ -142,6 +144,30 @@ func (c *Client) Chat() *ChatService { return c.chat }
 // baseURL 默认指向 wau-core :18400(wau-go-sdk 复用 kernel transport),但
 // Publish/Load 调用走绝对路径 + multipart,wau-registry 自动适配。
 func (c *Client) Skills() *SkillsService { return c.skills }
+
+// L5 returns the L5Service (v1.0.0 M11 P4.5 ⭐L5 包管理器,per D72/D73/D74)。
+//
+// 用法:
+//
+//	// 装 agent
+//	resp, err := c.L5().Install(ctx, wau.L5InstallRequest{
+//	    UserID:    "alice",
+//	    AgentName: "weather-agent",
+//	    Config:    map[string]string{"city": "北京"},
+//	})
+//
+//	// 搜 wau-registry
+//	sr, err := c.L5().Search(ctx, wau.L5SearchRequest{
+//	    UserID: "alice", Query: "weather", Limit: 10,
+//	})
+//
+//	// 登入拿 token
+//	lr, err := c.L5().Login(ctx, wau.L5LoginRequest{
+//	    Username: "alice", Password: "alice-pwd",
+//	})
+//
+// baseURL 默认指向 wau-core :18400(跟其他 service 一致)。
+func (c *Client) L5() *L5Service { return c.l5 }
 
 // Close releases SDK resources. Currently no-op; will be used by M3.1 gRPC client.
 func (c *Client) Close() error { return nil }
