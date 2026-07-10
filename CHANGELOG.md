@@ -43,6 +43,43 @@
 
 ---
 
+## [Unreleased] — v1.3.2 "MCP client (W3, 2026-07-11, per D87)"
+
+### Added
+
+- 新 sub-package `mcpclient/`(独立 package,不走 `c.doWithRetry`):
+  - `Client` + 7 sync tool wrapper(走 JSON-RPC 2.0 over HTTP,endpoint `POST {baseURL}/mcp`):
+    - `HealthCheck(ctx, target)`                      → `map[string]any`{status,target}
+    - `ParseAgentCard(ctx, raw)`                      → `*AgentCard`(raw 支持 string/[]byte/map)
+    - `SendMessage(ctx, target, *Message)`            → `*Response`(Kind=message|task)
+    - `GetTask(ctx, target, taskID)`                  → `*Task`
+    - `ListTasks(ctx, target, *TaskFilter)`           → `*ListTasksResult`(tasks+total)
+    - `CancelTask(ctx, target, taskID)`               → `*Task`(status.state=canceled)
+    - `GetExtendedAgentCard(ctx, target)`             → `*ExtendedAgentCard`(含 capabilities)
+  - 3 deferred placeholder(method 签名已就位,W4/W5 实装):
+    - `CreateTaskPushNotificationConfig` (W4)
+    - `StreamMessage` (W5, SSE)
+    - `SubscribeToTask` (W5, SSE)
+- 11 tool DTO:`AgentRef` / `Part` / `Message` / `Task` / `TaskStatus` / `Artifact` / `Response` / `AgentCard` / `ExtendedAgentCard` / `TaskFilter` / `ListTasksResult` / `PushNotificationConfig`
+- `*RPCError` 类型(对齐 kernel `mcp.Error`):5 spec code + 3 MCP-specific code
+- 4 functional option:`WithHTTPClient` / `WithBearerToken` / `WithUserAgent` / `WithEndpoint`
+- 21 unit tests(httptest + mock MCP server)覆盖 7 tool 全 happy + 4 error path + 4 option + 3 lifecycle
+
+### Compatibility (D60 additive)
+
+- 0 改老 8 service(Agents/Tasks/Kernel/Intent/Handshake/Chat/Skills/L5)
+- 0 改老根包导出 API
+- 新 sub-package 独立 module path:`github.com/wau/wau-go-sdk/mcpclient`
+- 走独立 `*http.Client`(caller 注入),不绑定 `Client.doWithRetry`(JSON-RPC error 走 200 + body envelope,跟 REST-shaped 错误不兼容)
+
+### Reference
+
+- D87 拍板(MCP server):[stage2/2026-07-10-D86-D87-D88-protocol-gateway-decision](https://github.com/wau-network/WAU-develop/blob/main/develop-log/kernel/v1.0.0/stage2/2026-07-10-D86-D87-D88-protocol-gateway-decision.md)
+- 5 SDK MCP client 详设:[process/2026-07-10-W3-MCP-client-SDK-design](https://github.com/wau-network/WAU-develop/blob/main/develop-log/kernel/v1.0.0/process/2026-07-10-W3-MCP-client-SDK-design.md)
+- MCP auth SDK design:[process/2026-07-11-W3-MCP-auth-SDK-design](https://github.com/wau-network/WAU-develop/blob/main/develop-log/kernel/v1.0.0/process/2026-07-11-W3-MCP-auth-SDK-design.md)
+
+---
+
 ## [Unreleased] — v1.0.0 "Phoenix" M11 W8 (2026-07-08)
 
 ### Added
