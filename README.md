@@ -48,6 +48,26 @@ client.Tasks().Submit(ctx, req)        // POST /registry/tasks/submit
 client.Intent().Parse(ctx, prompt)     // gRPC stub(M3.1 实装)
 ```
 
+## 4 协议网关 sub-package(v1.3.2 + v1.3.3,per D86+D87+D88 拍板)
+
+```go
+// MCP (v1.3.2,D87) — 7 sync tool + 3 deferred
+mcp, _ := mcpclient.NewClient("https://kernel.example.com",
+    mcpclient.WithBearerToken(jwt),
+)
+card, _ := mcp.ParseAgentCard(ctx, []byte(`{"name":"Fox"}`))
+
+// UCP (v1.3.3,D88) — 11 commerce tool(benny 独立 demo plugin/kernel 通用 commerce 层)
+ucp, _ := ucpclient.NewClient("https://kernel.example.com",
+    ucpclient.WithBearerToken(oauthJWT),
+)
+cart, _ := ucp.AddToCart(ctx, "prod-123", 2)
+session, _ := ucp.CreateCheckoutSession(ctx, cart.CartID) // W3 stub,W5+ Stripe
+```
+
+两个 sub-package 走同一 JSON-RPC 2.0 over HTTP transport(不同 endpoint:`/mcp` vs `/ucp`)。
+8 commerce DTO(Product / Cart / Order / ...)byte-equal 跨 5 SDK 保证(per D13)。
+
 ## 关联仓库
 
 - 上游: [wau-core-kernel](https://github.com/wau/wau-core-kernel) (HTTP :18400, gRPC :50051)
