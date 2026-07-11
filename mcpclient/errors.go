@@ -1,14 +1,14 @@
 // Package mcpclient provides an MCP client for WAU.
 //
-// ⭐ v1.0.0 M11 P6 MCP client (per D87+D88,2026-07-10)。
+// ⭐ v1.0.0 M11 P6 MCP client (per D87+D88+D89,2026-07-10~11)。
 //
 // 5 SDK 共享 wire format:JSON-RPC 2.0 over HTTP at POST {baseURL}/mcp
 // (跟 WAU-core-kernel internal/protocol/mcp/server.go handleMCP 对齐)。
 //
 // 本子包 = 7 sync tool wrapper (HealthCheck / ParseAgentCard / SendMessage /
-// GetTask / ListTasks / CancelTask / GetExtendedAgentCard) + 3 deferred
-// placeholder (CreateTaskPushNotificationConfig / StreamMessage /
-// SubscribeToTask,W4+W5 kernel 实装后再加逻辑)。
+// GetTask / ListTasks / CancelTask / GetExtendedAgentCard) + 2 SSE streaming
+// 实装 (StreamMessage / SubscribeToTask,per D89.A.5,2026-07-11) +
+// 1 deferred placeholder (CreateTaskPushNotificationConfig,W4 kernel 实装)。
 //
 // 协议合规:
 //   - D60 additive: 0 改老 SDK,独立子包

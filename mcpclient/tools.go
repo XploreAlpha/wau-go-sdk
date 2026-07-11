@@ -157,26 +157,15 @@ func (c *Client) GetExtendedAgentCard(ctx context.Context, target any) (*Extende
 }
 
 // ────────────────────────────────────────────────────────
-// 3 deferred method placeholder(W4 notification + W5 SSE)
+// 1 deferred method placeholder(W4 notification)
 //
-// 本 commit 只占位,等 kernel W4/W5 实装后再加 wire format 逻辑。
+// StreamMessage / SubscribeToTask 已在 streaming.go 实装(D89.A.5,2026-07-11)。
+// CreateTaskPushNotificationConfig 等 kernel W4 实装。
 // ────────────────────────────────────────────────────────
 
 // CreateTaskPushNotificationConfig 调 create_task_push_notification_config tool(W4 实装)。
 func (c *Client) CreateTaskPushNotificationConfig(ctx context.Context, target any, cfg *PushNotificationConfig) (*PushNotificationConfig, error) {
 	return nil, fmt.Errorf("mcpclient: CreateTaskPushNotificationConfig deferred to W4 (kernel 待实装)")
-}
-
-// StreamMessage 调 stream_message tool(W5 实装,SSE)。
-//
-// W5 实现后返 channel 接收 stream event;当前返 error。
-func (c *Client) StreamMessage(ctx context.Context, target any, msg *Message) error {
-	return fmt.Errorf("mcpclient: StreamMessage deferred to W5 (kernel SSE 待实装)")
-}
-
-// SubscribeToTask 调 subscribe_to_task tool(W5 实装,SSE)。
-func (c *Client) SubscribeToTask(ctx context.Context, target any, taskID string) error {
-	return fmt.Errorf("mcpclient: SubscribeToTask deferred to W5 (kernel SSE 待实装)")
 }
 
 // ────────────────────────────────────────────────────────
