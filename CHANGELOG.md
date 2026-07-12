@@ -1,3 +1,10 @@
+## Wire Format Reference (added 2026-07-11 per D93 SOP)
+
+This SDK is **canonical-compliant** with [WAU-protocol-spec v1.0.0](https://github.com/youhaoxi/WAU-protocol-spec).
+JSON schemas for `a2a-message` / `afp-send` / `ap2-mandate` / `netbird-config` / `ucp-checkout` are reference;
+Go struct field names (snake_case in JSON, PascalCase in Go) may differ from schema `properties` keys,
+but the **JSON-RPC envelope + wire format MUST match**.
+
 ## [Unreleased] — v1.3.0 "bot_uuid field add (W7.1, 2026-07-09)"
 
 ### Added
