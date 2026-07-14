@@ -290,3 +290,97 @@ type ChatCompletionChunk struct {
 	Model   string        `json:"model"`
 	Choices []ChunkChoice `json:"choices"`
 }
+
+// ────────────────────────────────────────────────────────────
+// WauWorkflow(per v1.0.1 SoT doc + SDK Consumer Contract §二.2 + D78 byte-equal)
+// TS canonical: src/wau/types.ts#L116-L158
+// ────────────────────────────────────────────────────────────
+
+// WauWorkflowType 是 WauWorkflow 的 workflow 类型 enum(6 值,per WauWorkflow msg type spec §三.3)
+// 跟 wau-intent / afp-protocol proto WorkflowType 一致
+// 5 SDK byte-equal,wire format 是 snake_case uppercase 字符串
+type WauWorkflowType string
+
+const (
+	WauWorkflowTypeUnspecified WauWorkflowType = "WORKFLOW_TYPE_UNSPECIFIED"
+	WauWorkflowTypeSingle      WauWorkflowType = "WORKFLOW_TYPE_SINGLE"
+	WauWorkflowTypeChain       WauWorkflowType = "WORKFLOW_TYPE_CHAIN"
+	WauWorkflowTypeParallel    WauWorkflowType = "WORKFLOW_TYPE_PARALLEL"
+	WauWorkflowTypeQuorum      WauWorkflowType = "WORKFLOW_TYPE_QUORUM"
+	WauWorkflowTypeFanOut      WauWorkflowType = "WORKFLOW_TYPE_FAN_OUT"
+)
+
+// WauWorkflowAgent 是 WauWorkflow 里单个 agent 推荐块(per TS L49-L55)
+// 跟 wau-intent proto WauWorkflowAgent 字段 1:1
+type WauWorkflowAgent struct {
+	Name       string   `json:"name"`
+	URL        string   `json:"url"`
+	Skills     []string `json:"skills"`
+	Confidence float64  `json:"confidence"`
+}
+
+// WauWorkflowDependency 是 DAG 依赖图节点(per TS L60-L62)
+// 跟 wau-intent proto WauWorkflowDependency 字段 1:1
+type WauWorkflowDependency struct {
+	UpstreamAgents []string `json:"upstream_agents"`
+}
+
+// WauWorkflowDependencyGraph 是 WauWorkflow.dependency_graph 嵌套结构(per TS L119-L121)
+type WauWorkflowDependencyGraph struct {
+	Dependencies map[string]WauWorkflowDependency `json:"dependencies"`
+}
+
+// WauWorkflow 是 5 SDK 共享 wire format 的核心 DTO(per SDK Consumer Contract §二.2)
+//
+// 19 字段(5 必填 + 14 元数据):
+//   - 必填 5 字段:agents / dependency_graph / confidence / workflow_type / harness
+//   - 标识 3 字段:workflow_id / created_at / user_id
+//   - DAG pattern 元数据 3 optional:dag_pattern_hint / description / estimated_duration_ms
+//   - 推荐上下文 3 字段:original_query / parent_workflow_id? / retry_count?
+//   - Server metadata 3 字段:server_version / trace_id / ttl_ms
+//   - 鉴权 2 字段:auth_user_id / auth_claim_set
+//
+// JSON 字段 snake_case(per TS L15 + WauWorkflow msg type spec §三.3 + #14 A 拍板)
+//
+// ⚠️ voice workflow 必须 harness='codex-appserver'(per #17 配错保护)
+type WauWorkflow struct {
+	// === 必填 5 字段 ===
+	Agents          []WauWorkflowAgent         `json:"agents"`
+	DependencyGraph WauWorkflowDependencyGraph `json:"dependency_graph"`
+	Confidence      float64                    `json:"confidence"`
+	WorkflowType    WauWorkflowType            `json:"workflow_type"`
+	/** voice workflow 必须 'codex-appserver',其它 harness 抛错(per #17) */
+	Harness string `json:"harness"`
+
+	// === 标识字段 ===
+	WorkflowID string `json:"workflow_id"`
+	/** unix ms */
+	CreatedAt int64  `json:"created_at"`
+	UserID    string `json:"user_id"`
+
+	// === DAG pattern 元数据(per #4 抽象 wau-dag-patterns) ===
+	DagPatternHint      *string `json:"dag_pattern_hint,omitempty"`
+	Description         *string `json:"description,omitempty"`
+	EstimatedDurationMs *int64  `json:"estimated_duration_ms,omitempty"`
+
+	// === 推荐上下文 ===
+	/** 用户原始 query */
+	OriginalQuery string  `json:"original_query"`
+	/** 子 workflow 追溯 */
+	ParentWorkflowID *string `json:"parent_workflow_id,omitempty"`
+	/** 0=首次,1+=重试 */
+	RetryCount *int `json:"retry_count,omitempty"`
+
+	// === Server-side metadata ===
+	/** wau-intent server version,byte-equal verify anchor */
+	ServerVersion string `json:"server_version"`
+	/** 跨 SDK 调试 trace */
+	TraceID string `json:"trace_id"`
+	/** workflow 有效期,过期 client 拒收 */
+	TTLMs int64 `json:"ttl_ms"`
+
+	// === 鉴权上下文(per D66=B JWT 4-claim) ===
+	AuthUserID string `json:"auth_user_id"`
+	/** 4 claim names:sub/aud/exp/scope */
+	AuthClaimSet []string `json:"auth_claim_set"`
+}
