@@ -1,6 +1,6 @@
 // Package wau provides the official Go SDK for WAU-core-kernel.
 //
-// v0.6.0 M3 W5 — 抽取自 wau-cli/internal/client/(2026-06-13)
+// v1.3.4 — 抽取自 wau-cli/internal/client/(2026-06-13)
 // 改进:typed errors / 熔断 / 重试 / HS256 鉴权 / SubmitRequest 字段以 kernel 真相源为准
 package wau
 

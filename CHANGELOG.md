@@ -5,7 +5,15 @@ JSON schemas for `a2a-message` / `afp-send` / `ap2-mandate` / `netbird-config` /
 Go struct field names (snake_case in JSON, PascalCase in Go) may differ from schema `properties` keys,
 but the **JSON-RPC envelope + wire format MUST match**.
 
-## [Unreleased] — v1.3.0 "bot_uuid field add (W7.1, 2026-07-09)"
+## [v1.3.4] - 2026-08-14
+
+### Notes
+
+- wau-go-sdk v1.3.4 consolidation release — aggregates the v1.3.0 / v1.3.1 / v1.3.2 / v1.3.3 changes below into a single canonical SDK tag per the WAU 19-repo lockstep version policy. No new public surface introduced at the v1.3.4 patch bump; version synchronized with the sibling SDKs.
+
+---
+
+## [v1.3.0] - 2026-08-14 "bot_uuid field add (W7.1, 2026-07-09)"
 
 ### Added
 
@@ -24,7 +32,7 @@ but the **JSON-RPC envelope + wire format MUST match**.
 
 ---
 
-## [Unreleased] — v1.3.1 "L5 包管理器 client (W2.5, 2026-07-10, per D72/D73/D74)"
+## [v1.3.1] - 2026-08-14 "L5 包管理器 client (W2.5, 2026-07-10, per D72/D73/D74)"
 
 ### Added
 
@@ -50,7 +58,7 @@ but the **JSON-RPC envelope + wire format MUST match**.
 
 ---
 
-## [Unreleased] — v1.3.2 "MCP client (W3, 2026-07-11, per D87)"
+## [v1.3.2] - 2026-08-14 "MCP client (W3, 2026-07-11, per D87)"
 
 ### Added
 
@@ -87,7 +95,7 @@ but the **JSON-RPC envelope + wire format MUST match**.
 
 ---
 
-## [Unreleased] — v1.3.3 "UCP client (W3, 2026-07-11, per D88)"
+## [v1.3.3] - 2026-08-14 "UCP client (W3, 2026-07-11, per D88)"
 
 ### Added
 

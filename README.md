@@ -1,176 +1,170 @@
 # wau-go-sdk
 
-> **WAU Go SDK v1.0.0 GA** — 官方 Go 客户端,WAU-core-kernel 智能调度内核接入入口
-> v0.7.0 "Amber" 🔷 — **v1.0.0 = 2026-07-25 GA**(W7.7 完成)
+> Official Go SDK for the WAU network — connect to `wau-core-kernel` and the full WAU service mesh in five lines of Go.
+
+[English](README.md) | [中文](README.zh-CN.md)
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/wau/wau-go-sdk.svg)](https://pkg.go.dev/github.com/wau/wau-go-sdk)
-[![Version](https://img.shields.io/badge/version-v1.0.0-blue?style=flat-square)](https://github.com/wau/wau-go-sdk/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.25%2B-blue)](https://golang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/wau/wau-go-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/wau/wau-go-sdk/actions)
 
-## 状态
+## Features
 
-✅ **v1.0.0 GA** (2026-07-25) — **Public API stable**
+A single `Client` covers the eight public services of the WAU kernel plus two protocol-gateway sub-clients and a Bot platform abstraction for eight chat networks.
 
-| Phase | 状态 |
-|-------|------|
-| W5.1 go.mod + CI + 基础脚手架 | ✅ |
-| W5.2 wau-circuit 补单测(地基) | ✅ |
-| W5.3 Client + Agents + Tasks + Kernel 4 核心对象 | ✅ |
-| W5.4 熔断 + 重试装饰器 | ✅ |
-| W5.5 HS256 鉴权 | ✅ |
-| W5.6 单测 + 5 场景契约 + 真 kernel 联调 | ✅ |
-| W5.7 README + docs + examples | ✅ |
-| W5.8 OTel Tracer 抽象(W1 M3 Day 3) | ✅ |
-| W1 Day 6 5 edge case 测试(timeout / rate-limit / cancel / retry / 5xx) | ✅ |
-| W7.7 Public API stable + deprecation policy | ✅ |
-| tag v1.0.0 + pkg.go.dev | ⏳ 用户手动 |
+- **Eight core services** — Agents, Tasks, Kernel, Intent, Handshake, Chat, Skills, and L5 (the package-manager client) are all reachable through one `wau.New(...)` handle.
+- **Built-in resilience** — exponential backoff with jitter, per-Client circuit breaker, typed errors (`errors.Is(err, ErrNotFound)`), and HS256 JWT auth are wired into every request by `doWithRetry`.
+- **Pluggable tracing** — implement the `Tracer` interface to bridge OpenTelemetry / OpenTracing / your own backend; the default is a zero-dependency no-op.
+- **Two protocol-gateway sub-clients** — `mcpclient` (JSON-RPC 2.0 over HTTP, 7 sync MCP tools + 3 deferred) and `ucpclient` (11 commerce tools, Stripe-ready) talk to the kernel through independent transports.
+- **Eight Bot platforms** — Telegram, Discord, Webhook, Slack, Feishu, QQ, DingTalk, and Email are first-class citizens under `bot/`; each pair has a matching server-side adapter in `wau-channel`.
+- **OAuth + PKCE** — production-ready `OAuthClient`, `RefreshableTokenStore`, and `PKCEClient` for client-credentials and authorization-code flows.
+- **Skills marketplace** — list, publish, and load `agentskills.io`-compliant skill bundles (`Skills().List / Get / Publish / LoadForUser`).
+- **Test coverage gate** — `go test -race -coverprofile` keeps total coverage at or above 80% in CI on Go 1.25 / Ubuntu.
 
-## 安装
+## Installation
 
 ```bash
-go get github.com/wau/wau-go-sdk@v1.0.0
+go get github.com/wau/wau-go-sdk@v1.3.4
 ```
 
-## Public API 速览
+Requirements: **Go 1.25+** (the SDK also builds on Go 1.23 / 1.24). The module path is `github.com/wau/wau-go-sdk`.
+
+## Quickstart
 
 ```go
-client, _ := wau.New("http://localhost:18400",
-    wau.WithTimeout(30*time.Second),
-    wau.WithAuth("your-token"),
-    wau.WithTracer(myTracer),  // 可选 OTel adapter
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    wau "github.com/wau/wau-go-sdk"
 )
 
-// 4 核心服务
-client.Kernel().Info(ctx)              // GET /kernel/info
-client.Agents().List(ctx)              // GET /registry/agents
-client.Agents().Get(ctx, "Whis")       // GET /registry/agents/{name}
-client.Tasks().Submit(ctx, req)        // POST /registry/tasks/submit
-client.Intent().Parse(ctx, prompt)     // gRPC stub(M3.1 实装)
+func main() {
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+
+    client, err := wau.New("http://localhost:18400", wau.WithTimeout(5*time.Second))
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer client.Close()
+
+    info, err := client.Kernel().Info(ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("kernel %s — uptime %ds\n", info.Version, info.Uptime)
+}
 ```
 
-## 4 协议网关 sub-package(v1.3.2 + v1.3.3,per D86+D87+D88 拍板)
+Run it:
+
+```bash
+go run main.go
+# kernel v1.x.y — uptime 42s
+```
+
+## Public API
+
+The root package exposes one `Client` with eight service getters, all backed by the same `doWithRetry` chain (auth → circuit breaker → retry → HTTP).
+
+| Service            | Getter                  | What it covers                                                                                       |
+|--------------------|-------------------------|------------------------------------------------------------------------------------------------------|
+| `AgentsService`    | `client.Agents()`       | list / get / register / deregister / score / heartbeat / report-load (HTTP `/registry/agents`)        |
+| `TasksService`     | `client.Tasks()`        | submit / simulate / get (HTTP `/registry/tasks/submit`)                                              |
+| `KernelService`    | `client.Kernel()`       | `Info()` and `Health()` (HTTP `/kernel/info`)                                                        |
+| `IntentService`    | `client.Intent()`       | gRPC stub for intent parsing (M3.1 wiring; returns `ErrNotImplemented` today)                        |
+| `ChatService`      | `client.Chat()`         | OpenAI-compatible chat completions + SSE streaming against `wau-edge`                                |
+| `HandshakeService` | `client.Handshake()`    | A2A / AFP session negotiation                                                                         |
+| `SkillsService`    | `client.Skills()`       | list / get / publish / load user skills (multipart upload to `wau-registry`)                         |
+| `L5Service`        | `client.L5()`           | install / uninstall / update / search / login — the WAU package-manager client                       |
+
+Helpers exposed on `Client`: `BaseURL()`, `CircuitState()`, `Close()`. Transport options: `WithTimeout`, `WithAuth`, `WithRetry`, `WithCircuit`, `WithLogger`, `WithTracer`.
+
+### Sub-clients
 
 ```go
-// MCP (v1.3.2,D87) — 7 sync tool + 3 deferred
+// MCP — JSON-RPC 2.0 over HTTP, endpoint POST {baseURL}/mcp
 mcp, _ := mcpclient.NewClient("https://kernel.example.com",
     mcpclient.WithBearerToken(jwt),
 )
 card, _ := mcp.ParseAgentCard(ctx, []byte(`{"name":"Fox"}`))
 
-// UCP (v1.3.3,D88) — 11 commerce tool(benny 独立 demo plugin/kernel 通用 commerce 层)
+// UCP — JSON-RPC 2.0 over HTTP, endpoint POST {baseURL}/ucp
 ucp, _ := ucpclient.NewClient("https://kernel.example.com",
     ucpclient.WithBearerToken(oauthJWT),
 )
 cart, _ := ucp.AddToCart(ctx, "prod-123", 2)
-session, _ := ucp.CreateCheckoutSession(ctx, cart.CartID) // W3 stub,W5+ Stripe
 ```
 
-两个 sub-package 走同一 JSON-RPC 2.0 over HTTP transport(不同 endpoint:`/mcp` vs `/ucp`)。
-8 commerce DTO(Product / Cart / Order / ...)byte-equal 跨 5 SDK 保证(per D13)。
-
-## 关联仓库
-
-- 上游: [wau-core-kernel](https://github.com/wau/wau-core-kernel) (HTTP :18400, gRPC :50051)
-- 兄弟: [wau-python-sdk](https://github.com/wau/wau-python-sdk) | [wau-typescript-sdk](https://github.com/wau/wau-typescript-sdk) | [wau-rust-sdk](https://github.com/wau/wau-rust-sdk) — 4/5 SDK 1.0 GA
-- 抽取源: [wau-cli/internal/client/](https://github.com/wau/wau-cli/tree/main/internal/client) (337 行)
-- 复用: [wau-circuit](https://github.com/wau/wau-circuit) (熔断器)
-
-## 计划文档
-
-v0.7.0 完整计划:[`/home/inamoto888/WAU-develop/develop-log/kernel/v0.7.0/milestone.md`](file:///home/inamoto888/WAU-develop/develop-log/kernel/v0.7.0/milestone.md)
-
-## v0.9.0 "Acorn" 收口段(2026-09-15 GA)
-
-上文介绍 v0.7.0 计划 + 协议。本段为 v0.9.0 GA 增量补充。
-
-### 角色
-
-| OS 类比 | Client SDK(Go,开发者入口)|
-|---|---|
-| 部署 | Go module,被 B 端开发者 `go get` |
-| 通信 | gRPC → wau-llm-router :18404 + wau-channel webhook 模式 |
-| 状态 | v1.1.0 已随 v0.8.0 GA 同步发版(2026-07-13)|
-
-### v0.9.0 新增
-
-- **直连 wau-llm-router**(per [[project-v0-9-0-M3-§3.7-chat-sdk-4langs-2026-06-30]]):不再经过 wau-edge 也能调
-- **bot/ 字段 5/5 100% 对齐**(per [[project-v0-9-0-stage0-closure-2026-06-28]]):Telegram / Discord / Webhook
-- **per §3.7 §6**:4 SDK 一致 26 funcs / 0 回归
-
-### 5 行 SDK 用例
+### Bot platforms
 
 ```go
-import "github.com/XploreAlpha/wau-go-sdk/bot/telegram"
+import "github.com/wau/wau-go-sdk/bot/telegram"
 
 bot := telegram.New(telegram.Config{
-    Token:   os.Getenv("TELEGRAM_TOKEN"),
+    Token:    os.Getenv("TELEGRAM_TOKEN"),
     TenantID: "acme",
 })
-bot.Start() // 监听消息 + 自动转 Task
+if err := bot.Start(); err != nil {
+    log.Fatal(err)
+}
 ```
 
-### v0.9.0 "Acorn" 5 份核心文档
+Same shape for Discord, Webhook, Slack, Feishu, QQ, DingTalk, and Email — every platform lives under `bot/<name>/` and uses a single `Bot` interface.
 
-| # | 文件 | 内容 |
-|---|---|---|
-| 1 | [README.md](README.md)(本文件)| SDK 入口 + 协议 |
-| 2 | [QUICKSTART.md](QUICKSTART.md) | 15 分钟跑通第 1 个 bot |
-| 3 | [DEPLOY.md](DEPLOY.md) | 发布 + 版本管理 |
-| 4 | [ARCHITECTURE.md](ARCHITECTURE.md) | 模块 + 直连链路 |
-| 5 | [CHANGELOG.md](CHANGELOG.md) | v0.7.0 + v1.1.0 倒序(136 行已存在)|
+## Examples
 
-### 历史锚点
+The [`examples/`](examples/) directory ships nine runnable programs:
 
-- v1.1.0 SDK 同步发版(per [[project-v0.8.0-GA-2026-07-13]])
-- bot/ 字段 5/5 对齐(per [[project-v0-9-0-stage0-closure-2026-06-28]])
+| Directory                  | What it shows                                                                |
+|----------------------------|------------------------------------------------------------------------------|
+| `examples/list_agents/`    | page through `Agents().List`                                                 |
+| `examples/submit_task/`    | submit a task and poll `Tasks().Get`                                         |
+| `examples/heartbeat_loop/` | 60-second agent heartbeat loop                                               |
+| `examples/five_scenarios/` | the canonical five scenario contract tests (clinical / france / pain / sales / rare-disease) |
+| `examples/chat_stream/`    | consume SSE streaming chat completions                                       |
+| `examples/multi_llm_e2e/`  | end-to-end test against multiple LLM backends                                |
+| `examples/bot_telegram/`   | Telegram bot wired to a kernel tenant                                        |
+| `examples/bot_discord/`    | Discord bot wired to a kernel tenant                                         |
+| `examples/bot_webhook/`    | generic webhook bot                                                          |
 
-## 协议
+Run any of them with:
 
-MIT © 2026 youhaoxi
-## Bot Platforms
-
-WAU SDK 通过两段责任分工对接 N 个 Bot 平台:
-
-| 责任段 | 仓 | 文件 | 覆盖范围 |
-|---|---|---|---|
-| **公共契约** | 本 SDK(`bot/common/bots_service.<ext>`) | `Bot` + `BotsService` 抽象接口 | 5 SDK 100% 一致(per M10 N1)|
-| **C 端 SDK bot/ 子包** | 本 SDK | `bot/{telegram,discord,webhook,slack,feishu,qq,dingtalk,email}/` | 每个 SDK 自带 8 平台(W5 Q1=B 反 W4.1 拍板)|
-| **服务端 8 平台 adapter** | `wau-channel` | `internal/adapter/{slack,feishu,dingtalk,qq,email,telegram,discord,webhook}/*_real.go` | 全部 8 平台完整 4 步(per W7 2026-07-07 SDK 接通)|
-| **服务端 bot HTTP API** | `wau-edge` | `POST /v1/bots/{bot_id}/messages`(per M10 N3) | Bot → 后端路由 |
-
-**Bot Platforms 公开能力表**(2026-07-13, **W5 update 反 W4.1**):
-
-| Platform     | 本 SDK bot/ | wau-channel adapter | 状态 |
-|--------------|-------------|---------------------|------|
-| Telegram     | ✅ | ✅ | 双端完整 |
-| Discord      | ✅ | ✅ | 双端完整 |
-| Webhook      | ✅ | ✅ | 双端完整 |
-| Slack        | ✅ Stage 1 native | ✅ 完整 4 步(`slack-go/slack` v0.27.0 socketmode + RTM) | W6.2 closure: socketmode client + RTM 监听 (~244 LoC) |
-| Feishu       | ✅ Stage 1 native | ✅ 完整 4 步(`larksuite/oapi-sdk-go/v3` v3.9.8) | W6.2 closure: EventReceiver 集成 (~264 LoC) |
-| QQ           | ✅ Stage 1 native | ✅ 完整 4 步(`tencent-connect/botgo` v0.2.1) | W6.2 closure: OpenAPI v2 websocket 集成 (~272 LoC) |
-| DingTalk     | ✅ Stage 1 native | ✅ 完整 4 步(`open-dingtalk/dingtalk-stream-sdk-go` v0.9.1) | W6.2 closure: StreamCallback 长连接 (~245 LoC) |
-| Email        | ✅ Stage 1 native | ✅ 完整 4 步(`emersion/go-imap` v1.2.1 + stdlib `net/smtp`) | W6.2 closure: IMAP IDLE + SMTP 发送 (~363 LoC) |
-
-> **W5 反 W4.1 设计反转**(per 2026-07-13 Q1=B 拍板):SDK 端 bot/ 现已支持 8 平台(原 W4.1 仅 3 平台);5 平台 (Slack/Feishu/QQ/DingTalk/Email) 走 SDK 端 Stage 0 stub 替代原"⛔ 走服务端 adapter"。Stage 1 路径(per M11 W5-W6)将替换 stub 为 native SDK integration。W7 之后 wau-channel 8 平台 adapter 全部完整(per W7 2026-07-07 SDK 接通)。
->
-> **W6.2 closure (2026-07-09)**:5 平台 (Slack/Feishu/QQ/DingTalk/Email) Stage 0 stub → Stage 1 native SDK integration 100% 收口(per M10 N1 + D13 + D78 + D80 公共契约)。
->
-> **v1.3.0 field add (W7.1, 2026-07-09)**:Add `bot_uuid` (UUID v4, server-assigned) to `Account` + `RegisterBotRequest` DTOs in `bot/common/account.go`(per D78/D79/D80 拍板,D60 additive,0 breaking)。老 SDK v1.2.0 向后兼容(server 自动从 BotID slug 寻址并生成 bot_uuid)。
-
-**使用范式**(4 SDK 一致,Go SDK 示例):
-
-```go
-// SDK 端(B 端开发者):通过 BotsService 公共契约操作 bot
-client.Bots().Register(ctx, wau.RegisterBotRequest{
-    TenantID:     "acme",
-    Universe:     "default",
-    PublicBotID:  "weather-bot",
-})
-
-// 平台通信端:平台 SDK 自动选择 — 通过 wau-channel 服务端 adapter 调用
-// SDK 不需要直接 import slack/feishu/... — 走 wau-channel HTTP API
+```bash
+cd examples/list_agents
+go run .
 ```
 
-> **本节由 W4.1 README 标准化自动 append,2026-07-13**。D60 additive:0 改 README 老内容。
->
-> 关联:`WAU-develop/develop-log/kernel/v1.0.0/stage2/2026-07-13-PROGRESS-W4-launch.md`
+## Documentation
+
+| Doc                                            | Purpose                                                                  |
+|------------------------------------------------|--------------------------------------------------------------------------|
+| [ARCHITECTURE.md](ARCHITECTURE.md)              | Module layout, transport chain, bot / MCP / UCP boundaries               |
+| [API.md](API.md)                                | Service-by-service API reference (8 services + bot sub-package)          |
+| [FAQ.md](FAQ.md)                                | Common questions on auth, retry, circuit, gRPC stub, bot bridges         |
+| [QUICKSTART.md](QUICKSTART.md)                 | 15-minute end-to-end walkthrough                                          |
+| [DEPLOY.md](DEPLOY.md)                          | Versioning and Go module guidance                                         |
+| [RELEASING.md](RELEASING.md)                    | Release process                                                           |
+| [CHANGELOG.md](CHANGELOG.md)                    | Versioned release history                                                 |
+| [`docs/quickstart.md`](docs/quickstart.md)      | 5-minute walkthrough (legacy `docs/` location)                           |
+| [`docs/api.md`](docs/api.md)                    | API reference mirror                                                      |
+| [`docs/auth.md`](docs/auth.md)                  | HS256 JWT auth guide                                                      |
+| [`docs/retry_circuit.md`](docs/retry_circuit.md)| Retry + circuit-breaker internals                                         |
+
+## Versioning
+
+This release is **v1.3.4**. The Go SDK follows the [WAU 19-repo lockstep versioning policy](https://github.com/wau/wau-go-sdk/blob/main/CONTRIBUTING.md#version-sync-policy): when any sibling SDK (Python, TypeScript, Rust, Java, or the core kernel) ships `v1.3.X`, this repository must release `v1.3.X` in the same window. The SDK uses [SemVer 2.0.0](https://semver.org/); the public API is stable since v1.0.0 (2026-07-25), and breaking changes flow only through MAJOR bumps. Deprecated APIs are supported for at least one minor release with a compile-time migration hint.
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, test command, lint policy, pull-request workflow, and the WAU 19-repo version sync rule.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Copyright © 2026 youhaoxi.

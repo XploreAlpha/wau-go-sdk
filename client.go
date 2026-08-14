@@ -1,4 +1,4 @@
-// Package wau — wau-go-sdk v0.6.0-preview.1 官方 Go SDK
+// Package wau — wau-go-sdk v1.3.4 官方 Go SDK
 //
 // 抽取自 wau-cli/internal/client/(2026-06-13),扩展:
 //   - typed errors (errors.Is(err, ErrNotFound))
