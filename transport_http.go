@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -59,7 +60,19 @@ func (t *transport) authHeader() string {
 // 错误返回:
 //   - *APIError: HTTP 4xx/5xx
 //   - 其它: 网络错 / JSON 解码错
+//
+// ★ 2026-11-19:path 支持**绝对 URL**(http://… / https://…)⇒ 直接用,不改 host。
+// A2A 客户端要连**别的** agent 的地址,不是 kernel。
 func (t *transport) do(ctx context.Context, method, path string, body, v any) error {
+	return t.doWithHeaders(ctx, method, path, body, v, nil)
+}
+
+// doWithHeaders 执行一次 HTTP 请求,并附加自定义 header。
+//
+// ★ 2026-11-19 新增:A2A 客户端要带 `A2A-Version: 1.0` 头
+// (缺失或值不匹配服务端直接拒),且 Authorization 要用 agent 自己的
+// peer token 覆盖 kernel 的 JWT。
+func (t *transport) doWithHeaders(ctx context.Context, method, path string, body, v any, extra map[string]string) error {
 	var bodyReader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -69,7 +82,13 @@ func (t *transport) do(ctx context.Context, method, path string, body, v any) er
 		bodyReader = bytes.NewReader(data)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, t.baseURL+path, bodyReader)
+	// ★ 2026-11-19:绝对 URL 直接用(不拼 baseURL)
+	url := path
+	if !strings.HasPrefix(path, "http://") && !strings.HasPrefix(path, "https://") {
+		url = t.baseURL + path
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return fmt.Errorf("wau: new request: %w", err)
 	}
@@ -86,6 +105,12 @@ func (t *transport) do(ctx context.Context, method, path string, body, v any) er
 	t.mu.RUnlock()
 	if auth != "" {
 		req.Header.Set("Authorization", auth)
+	}
+
+	// ★ 2026-11-19:自定义 header 覆盖默认值
+	// (A2A 的 Authorization 要用 agent 的 peer token,不是 kernel 的 JWT)
+	for k, val := range extra {
+		req.Header.Set(k, val)
 	}
 
 	resp, err := t.httpClient.Do(req)

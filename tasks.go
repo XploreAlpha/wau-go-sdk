@@ -36,6 +36,15 @@ func (s *TasksService) Simulate(ctx context.Context, req SubmitRequest) (*Decisi
 	if err := s.c.doWithRetry(ctx, http.MethodPost, "/registry/tasks/simulate", req, &resp); err != nil {
 		return nil, err
 	}
+	// ★ 2026-11-19:simulate 端点返回的是 best_agent / best_score
+	// (不是 submit 的 selected_agent / score)⇒ 旧解析永远拿到空 agent。
+	// ⇒ 两个名字都读,统一归一到 SelectedAgent / Score。
+	if resp.SelectedAgent == "" {
+		resp.SelectedAgent = resp.BestAgent
+	}
+	if resp.Score == 0 {
+		resp.Score = resp.BestScore
+	}
 	return &resp, nil
 }
 

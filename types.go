@@ -4,6 +4,12 @@
 // 改进:typed errors / 熔断 / 重试 / HS256 鉴权 / SubmitRequest 字段以 kernel 真相源为准
 package wau
 
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+)
+
 // HealthResponse is the response from GET /health.
 type HealthResponse struct {
 	Status  string  `json:"status"`
@@ -41,13 +47,95 @@ type Agent struct {
 	LastSeen       string            `json:"lastSeen"`
 }
 
+// UnmarshalJSON 把 kernel 的**单数** universe 字段并进 Universes。
+//
+// kernel GET /registry/agents 的元素是
+// {"id","name","url","version","skills","universe"} —— 单数;
+// registry 卡片用的是复数 universes[] ⇒ 两个都收。
+func (a *Agent) UnmarshalJSON(data []byte) error {
+	type alias Agent // 避免递归
+	var raw struct {
+		alias
+		Universe string `json:"universe"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*a = Agent(raw.alias)
+	if raw.Universe != "" {
+		found := false
+		for _, u := range a.Universes {
+			if u == raw.Universe {
+				found = true
+				break
+			}
+		}
+		if !found {
+			a.Universes = append(a.Universes, raw.Universe)
+		}
+	}
+	return nil
+}
+
 // AgentListResponse is the paginated list of agents.
+//
+// ★ 2026-11-19:kernel 的 GET /registry/agents 返回的是**裸数组**
+// (实测:[{"id","name","url","version","skills","universe"}, ...]),
+// 不是 {agents:[...]} ⇒ 旧 SDK 直接 Unmarshal 报
+// "cannot unmarshal array into Go value of type wau.AgentListResponse"。
+// ⇒ 加 UnmarshalJSON 兼容三种形状:裸数组 / {agents:[...]} / {cards:[...]}。
 type AgentListResponse struct {
 	Agents     []Agent `json:"agents"`
 	Total      int64   `json:"total"`
 	Page       int     `json:"page"`
 	PageSize   int     `json:"pageSize"`
 	TotalPages int     `json:"totalPages"`
+}
+
+// UnmarshalJSON 兼容裸数组 / {agents:[...]} / {cards:[...]} 三种形状。
+func (r *AgentListResponse) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		var agents []Agent
+		if err := json.Unmarshal(trimmed, &agents); err != nil {
+			return err
+		}
+		r.Agents = agents
+		r.Total = int64(len(agents))
+		if r.PageSize <= 0 {
+			r.PageSize = 10
+		}
+		r.TotalPages = 1
+		return nil
+	}
+
+	type alias AgentListResponse // 避免递归
+	var raw struct {
+		alias
+		Cards []Agent `json:"cards"`
+		Items []Agent `json:"items"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*r = AgentListResponse(raw.alias)
+	if len(r.Agents) == 0 {
+		if len(raw.Cards) > 0 {
+			r.Agents = raw.Cards
+		} else if len(raw.Items) > 0 {
+			r.Agents = raw.Items
+		}
+	}
+	if r.Total == 0 {
+		r.Total = int64(len(r.Agents))
+	}
+	if r.PageSize <= 0 {
+		r.PageSize = 10
+	}
+	if r.TotalPages <= 0 {
+		r.TotalPages = 1
+	}
+	return nil
 }
 
 // PageOptions paginates Agent list queries.
@@ -78,9 +166,18 @@ type AgentRegisterRequest struct {
 	// UniverseLabels K8s-style labels(per universe,v0.8.0 M3-2A 新增)
 	// 跟 Agent.UniverseLabels 字段语义一致(per agent 粒度)
 	UniverseLabels map[string]string `json:"universe_labels,omitempty"`
+	// ★ 2026-11-19:注册时携带**调用凭证**。
+	//
+	// kernel 取候选时需要它拼 Authorization 头去调边缘 agent
+	// (registry 的注册 = 整卡覆盖写,不带 token 就没有 token)。
+	AuthToken string `json:"auth_token,omitempty"`
 }
 
 // AgentScore represents an agent's 15-dim score (current kernel returns 5-dim subset).
+//
+// ★ 2026-11-19:kernel 的真实响应是**嵌套 dimensions** 结构:
+// {"agentId":"x","totalScore":0.745,"dimensions":{"skillMatch":1,...}}
+// 旧结构是平铺字段 ⇒ 保留平铺字段做向后兼容,但以 dimensions 为真相源。
 type AgentScore struct {
 	Name        string  `json:"name"`
 	TotalScore  float64 `json:"totalScore"`
@@ -88,6 +185,45 @@ type AgentScore struct {
 	SkillMatch  float64 `json:"skillMatch"`
 	HealthScore float64 `json:"healthScore"`
 	LoadScore   float64 `json:"loadScore"`
+	// ★ 2026-11-19 新增:kernel 的真实响应字段
+	AgentID    string             `json:"agentId,omitempty"`
+	Dimensions map[string]float64 `json:"dimensions,omitempty"`
+}
+
+// UnmarshalJSON 兼容"平铺字段"与"嵌套 dimensions"两种形状。
+//
+// kernel : {"agentId","totalScore","dimensions":{15 维}}
+// 旧 SDK : {"name","totalScore","trustScore","skillMatch","healthScore","loadScore"}
+func (a *AgentScore) UnmarshalJSON(data []byte) error {
+	type alias AgentScore // 避免递归调用 UnmarshalJSON
+	var raw struct {
+		alias
+		Dimensions map[string]float64 `json:"dimensions"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*a = AgentScore(raw.alias)
+	a.Dimensions = raw.Dimensions
+	// 平铺字段从 dimensions 回填(以 dimensions 为真相源)。
+	if a.Dimensions != nil {
+		if v, ok := a.Dimensions["trustScore"]; ok {
+			a.TrustScore = v
+		}
+		if v, ok := a.Dimensions["skillMatch"]; ok {
+			a.SkillMatch = v
+		}
+		if v, ok := a.Dimensions["healthScore"]; ok {
+			a.HealthScore = v
+		}
+		if v, ok := a.Dimensions["loadScore"]; ok {
+			a.LoadScore = v
+		}
+	}
+	if a.Name == "" {
+		a.Name = a.AgentID
+	}
+	return nil
 }
 
 // AgentLoad represents agent runtime load (nested in AgentStatus).
@@ -99,12 +235,81 @@ type AgentLoad struct {
 }
 
 // AgentStatus represents agent's comprehensive status.
+//
+// ★ 2026-11-19:kernel 的真实响应是:
+// {"agentId","online":bool,"lastSeen","trust":{...},"circuitState":int}
+// 而旧 SDK 期望 {"name","status","trust":float,"load","circuit"}
+// ⇒ trust 可能是**数字**也可能是**对象** ⇒ 需要自定义 UnmarshalJSON。
 type AgentStatus struct {
 	Name    string    `json:"name"`
 	Status  string    `json:"status"`
 	Trust   float64   `json:"trust"`
 	Load    AgentLoad `json:"load"`
 	Circuit string    `json:"circuit"`
+	// ★ 2026-11-19 新增:kernel 的真实响应字段
+	AgentID      string          `json:"agentId,omitempty"`
+	Online       bool            `json:"online"`
+	LastSeen     int64           `json:"lastSeen"`
+	TrustDetail  json.RawMessage `json:"-"`
+	CircuitState int             `json:"circuitState"`
+}
+
+// UnmarshalJSON 兼容 kernel 的真实形状与旧形状。
+//
+// kernel : {"agentId","online":bool,"lastSeen":N,"trust":{...},"circuitState":N}
+// 旧形状 : {"name","status":"online","trust":0.9,"load":{...},"circuit":"closed"}
+func (a *AgentStatus) UnmarshalJSON(data []byte) error {
+	type alias AgentStatus // 避免递归
+	var raw struct {
+		alias
+		Trust json.RawMessage `json:"trust"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*a = AgentStatus(raw.alias)
+	a.TrustDetail = raw.Trust
+
+	// trust:数字 → Trust;trust:对象 → Trust = 对象里的 score,细节存 TrustDetail。
+	if len(raw.Trust) > 0 {
+		var f float64
+		if err := json.Unmarshal(raw.Trust, &f); err == nil {
+			a.Trust = f
+		} else {
+			var obj struct {
+				Score float64 `json:"score"`
+			}
+			if err := json.Unmarshal(raw.Trust, &obj); err == nil {
+				a.Trust = obj.Score
+			}
+		}
+	}
+
+	// status:优先用显式字符串;没有才从 online 布尔推导。
+	if a.Status == "" {
+		if a.Online {
+			a.Status = "online"
+		} else {
+			a.Status = "offline"
+		}
+	}
+	// circuit:优先用显式字符串;没有才从 circuitState 映射。
+	if a.Circuit == "" {
+		switch a.CircuitState {
+		case 0:
+			a.Circuit = "closed"
+		case 1:
+			a.Circuit = "open"
+		case 2:
+			a.Circuit = "half_open"
+		default:
+			a.Circuit = fmt.Sprintf("%d", a.CircuitState)
+		}
+	}
+	if a.Name == "" {
+		a.Name = a.AgentID
+	}
+	return nil
 }
 
 // Task represents a task record.
@@ -134,11 +339,24 @@ type SubmitRequest struct {
 }
 
 // DecisionInfo is the L3 decision details (nested in SubmitResponse).
+// DecisionInfo is the L3 decision result.
+//
+// ★ 2026-11-19:两个端点的字段名**不一样**,统一在这里归一:
+//   - POST /registry/tasks/simulate → {best_agent, best_score, url, reason, skills, ...}
+//   - POST /registry/tasks/submit   → decision.{selected_agent, score, candidates}
+// 旧 SDK 只认 selected_agent/score ⇒ simulate 永远解析出空 agent。
 type DecisionInfo struct {
 	SelectedAgent  string      `json:"selected_agent"`
 	Score          float64     `json:"score"`
 	DecisionTimeMs int         `json:"decision_time_ms"`
 	Candidates     []Candidate `json:"candidates,omitempty"`
+	// ★ 2026-11-19 新增:simulate 端点的原始字段
+	BestAgent    string   `json:"best_agent,omitempty"`
+	BestScore    float64  `json:"best_score,omitempty"`
+	URL          string   `json:"url,omitempty"`
+	Reason       string   `json:"reason,omitempty"`
+	Skills       []string `json:"skills,omitempty"`
+	IntentSource string   `json:"intent_source,omitempty"`
 }
 
 // Candidate is one agent in decision candidates.
@@ -146,6 +364,9 @@ type Candidate struct {
 	Name   string  `json:"name"`
 	Score  float64 `json:"score"`
 	Reason string  `json:"reason"`
+	// ★ 2026-11-19 新增:kernel 的 candidate 元素带 url
+	// (实测 POST /registry/tasks/submit → decision.candidates[].url)
+	URL string `json:"url,omitempty"`
 }
 
 // SubmitResponse is the L4 submit response (kernel v0.5.0+).

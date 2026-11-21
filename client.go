@@ -1,4 +1,4 @@
-// Package wau — wau-go-sdk v1.3.4 官方 Go SDK
+// Package wau — wau-go-sdk v1.4.0 官方 Go SDK
 //
 // 抽取自 wau-cli/internal/client/(2026-06-13),扩展:
 //   - typed errors (errors.Is(err, ErrNotFound))
@@ -46,6 +46,7 @@ type Client struct {
 	skills    *SkillsService
 	l5        *L5Service
 	logger    *slog.Logger
+	a2a       *A2AClient // ★ 2026-11-19:A2A v1.0 客户端
 }
 
 // New creates a new WAU SDK client.
@@ -83,6 +84,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	c.tasks = &TasksService{c: c}
 	c.kernel = &KernelService{c: c}
 	c.intent = &IntentService{c: c}
+	c.a2a = &A2AClient{c: c} // ★ 2026-11-19:A2A v1.0 客户端
 	c.handshake = &HandshakeService{c: c} // v0.8.0 M5-1 B.1
 	c.chat = &ChatService{c: c}          // v0.9.0 M3 §3.7
 	c.skills = &SkillsService{c: c}      // v1.0.0 M11 P4 (I 子项)

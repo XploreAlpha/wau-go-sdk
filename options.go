@@ -80,7 +80,7 @@ type Options struct {
 	Circuit    CircuitConfig
 	Auth       AuthConfig
 	Logger     *slog.Logger
-	UserAgent  string // default "wau-go-sdk/0.6.0-preview.1"
+	UserAgent  string // default "wau-go-sdk/1.4.0"
 	Tracer     Tracer // v0.7.0 W1: 可选 OTel-compatible tracer(nil = noop)
 }
 
@@ -146,7 +146,7 @@ func applyOptions(opts []Option) Options {
 		Timeout:   30 * time.Second,
 		Retry:     DefaultRetryConfig(),
 		Circuit:   DefaultCircuitConfig(),
-		UserAgent: "wau-go-sdk/0.6.0-preview.1",
+		UserAgent: "wau-go-sdk/1.4.0",
 	}
 	for _, opt := range opts {
 		opt(&o)

@@ -5,6 +5,40 @@ JSON schemas for `a2a-message` / `afp-send` / `ap2-mandate` / `netbird-config` /
 Go struct field names (snake_case in JSON, PascalCase in Go) may differ from schema `properties` keys,
 but the **JSON-RPC envelope + wire format MUST match**.
 
+## [v1.4.0] - 2026-11-19 — "Opal" — ★ intent 实装 + A2A v1.0 客户端
+
+### Fixed
+
+- **★ 解析层跟 kernel 真实响应脱节(实测发现,对着生产服务器 100.125.139.145)**
+  - `agents.list` —— kernel 的 `GET /registry/agents` 返回**裸数组**(不是 `{agents:[...]}`)
+    ⇒ 旧解析直接抛 `TypeError` ⇒ **整个方法不可用**。
+  - `agents.get` —— kernel 返回 `{agentId, online, lastSeen, trust:{...}, circuitState}`
+    ⇒ 旧解析抛 `unexpected keyword argument 'agentId'`。
+  - `agents.score` —— kernel 返回 `{agentId, totalScore, dimensions:{15 维}}`
+    ⇒ 旧解析抛 `unexpected keyword argument 'agentId'`;平铺字段现在从 `dimensions` 回填。
+  - `tasks.submit` —— kernel 的 candidate 元素带 `url` 字段
+    ⇒ 旧解析抛 `unexpected keyword argument 'url'` ⇒ **submit 整条路径不可用**。
+  - `tasks.simulate` —— kernel 返回 `best_agent` / `best_score`(不是 `selected_agent` / `score`)
+    ⇒ 旧解析永远得到空 agent。
+  - 修法:全部改成**显式取字段**,未知字段忽略;两种形状都兼容。
+
+### Added
+
+- **★ `IntentService` 从 gRPC stub 改成实装 HTTP**
+  - 之前 4 个方法全部返 `ErrNotImplemented` —— M3.1 一直没做。
+  - kernel 早就有可用端点(实测确认):`POST /v1/intent/parse` + `POST /v1/intent/score`。
+  - 现在的 5 个方法:`ParseIntent` / `ParseIntentFrom` / `ScoreAgents` / `Recommend` / `ListAgents` / `HealthCheck`。
+  - ⚠️ `/v1/intent/score` 的 score 元素用 **Go 字段名**;解析时两套拼写都认。
+
+- **★ `A2AClient` —— A2A v1.0 客户端(全新)**
+  - 5 个 SDK 之前都没有 A2A 客户端。
+  - 线格式(实测):方法名 `SendMessage` + **每次必带 `A2A-Version: 1.0` 头** + 可选 Bearer token。
+  - `SendMessage` 返回原始 JSON-RPC result;`SendText` 直接返回文本
+    (覆盖 task 分支 / message 分支 / legacy v0.3.0 三种形状)。
+  - transport 扩展:支持**绝对 URL**(连别的 agent)+ 自定义 header。
+
+- `AgentRegisterRequest` 加 `AuthToken` 字段(注册时携带**调用凭证**)。
+
 ## [v1.3.4] - 2026-08-14
 
 ### Notes
