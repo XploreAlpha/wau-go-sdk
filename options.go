@@ -82,6 +82,24 @@ type Options struct {
 	Logger     *slog.Logger
 	UserAgent  string // default "wau-go-sdk/1.4.0"
 	Tracer     Tracer // v0.7.0 W1: 可选 OTel-compatible tracer(nil = noop)
+
+	// CallerAgent 调用方 agent 名(声明"我是我")。
+	//
+	// 用途:kernel 的 L4 派活会把**自己**从候选里剔除,防"自派活死循环"。
+	//
+	// 🚨 事故背景(2026-11-27):hermes 派活给 WAU → WAU 按卡片打分把它自己
+	// 也选成候选 → 派活回它 → 它的 skill 又让它派活 ⇒ 无限递归,
+	// 实测烧掉 $14,822 / 3470 次模型调用 / 平均 prompt 73,774 token。
+	//
+	// ⚠️ 这个头**只做减法**(把自己踢出候选),不做加法(选别人)
+	// ⇒ 客户端谎报的收益是零(只会让自己不被选中)。
+	//
+	// 留空 ⇒ 不带这个头 ⇒ kernel 行为与升级前一致(向后兼容)。
+	//
+	// 什么时候需要显式设:
+	//   - 用 `Auth`(HS256):transport 自动取 `Auth.AgentName` ⇒ 不用设
+	//   - 用静态 Bearer:没有 signer ⇒ **要显式设**
+	CallerAgent string
 }
 
 // Option configures a Client via the functional options pattern.
@@ -120,6 +138,18 @@ func WithCircuitDisabled() Option {
 // WithAuth sets HS256 auth.
 func WithAuth(auth AuthConfig) Option {
 	return func(o *Options) { o.Auth = auth }
+}
+
+// WithCallerAgent declares which agent this client is.
+//
+// kernel's L4 dispatch drops the caller from the candidate list, which
+// prevents the self-dispatch loop (see Options.CallerAgent for the details
+// of the 2026-11-27 incident that motivated it).
+//
+// Only needed when the client authenticates with a static Bearer token —
+// with HS256 auth the agent name is taken from Auth.AgentName automatically.
+func WithCallerAgent(name string) Option {
+	return func(o *Options) { o.CallerAgent = name }
 }
 
 // WithLogger sets a custom slog logger.

@@ -24,16 +24,28 @@ type transport struct {
 	baseURL    string
 	httpClient *http.Client
 	userAgent  string
+	// callerAgent 调用方 agent 名(声明"我是我")。
+	//
+	// ★ 2026-11-28:kernel 的 L4 派活会剔除调用方自己,防自派活死循环
+	// (事故:烧掉 $14,822 / 3470 次调用)。见 Options.CallerAgent。
+	callerAgent string
 
 	mu        sync.RWMutex
 	authValue string // Bearer token (动态注入)
 }
 
 func newTransport(baseURL string, opts Options) *transport {
+	// ★ 2026-11-28:显式 CallerAgent 优先,否则回落到 Auth.AgentName
+	// (HS256 场景不用重复配)。
+	caller := opts.CallerAgent
+	if caller == "" {
+		caller = opts.Auth.AgentName
+	}
 	return &transport{
-		baseURL:    baseURL,
-		httpClient: opts.HTTPClient,
-		userAgent:  opts.UserAgent,
+		baseURL:     baseURL,
+		httpClient:  opts.HTTPClient,
+		userAgent:   opts.UserAgent,
+		callerAgent: caller,
 	}
 }
 
@@ -98,6 +110,14 @@ func (t *transport) doWithHeaders(ctx context.Context, method, path string, body
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", t.userAgent)
+
+	// ★ 2026-11-28:声明"调用方是我" ⇒ kernel 把我从候选里剔除。
+	//
+	// ⚠️ 这个头**只做减法**(把自己踢出候选),不做加法(选别人)
+	// ⇒ 客户端谎报的收益是零(只会让自己不被选中)。
+	if t.callerAgent != "" {
+		req.Header.Set("X-WAU-Caller-Agent", t.callerAgent)
+	}
 
 	// 鉴权 header(动态)
 	t.mu.RLock()
