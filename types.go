@@ -336,6 +336,19 @@ type Task struct {
 type SubmitRequest struct {
 	Prompt    string `json:"prompt" binding:"required"`
 	TimeoutMs int    `json:"timeout_ms,omitempty"`
+
+	// UserID 最终用户的 user_id。
+	//
+	// ★ 2026-11-28 (B2):kernel 把它放进 A2A message metadata 传给被派的 agent
+	// ⇒ agent 自己去 wau-profile 取**权威客户档案**(年龄/预算/健康),
+	// 客户端**不必**再把客户变量抄进 prompt。
+	//
+	// ⚠️ 这一条是 2026-11-27 烧 $14,822 事故的根治点之一:
+	// 客户端抄变量 ⇒ 变量经过 LLM 转述 ⇒ 曾编造出「35岁/5000元」
+	// (真实是 42岁/8000),且编造值留在会话历史里自我复制。
+	//
+	// 留空 ⇒ 不带 ⇒ 被派的 agent 按老行为从对话里问用户。
+	UserID string `json:"user_id,omitempty"`
 }
 
 // DecisionInfo is the L3 decision details (nested in SubmitResponse).
